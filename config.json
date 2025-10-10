@@ -1,7 +1,15 @@
 {
+  "demo_mode": true,
+  "post_status": "draft",
+  "category_id": null,
+  "tags_by_name": [
+    "sức khỏe",
+    "y tế",
+    "nhãn khoa"
+  ],
   "image_policy": {
     "min_images": 2,
-    "insert_position": "after_paragraph_2"
+    "insert_position": "after_bullets"
   },
   "topics": [
     {
@@ -11,7 +19,8 @@
         "bờ mi",
         "khô mắt",
         "viêm kết mạc",
-        "nhãn khoa"
+        "nhãn khoa",
+        "thị lực"
       ],
       "fallback_images": [
         "https://source.unsplash.com/1600x900/?eye,clinic",
