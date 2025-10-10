@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# Vietyen Bot v4.3.7
-# - Daily health-only draft posts from selected RSS.
-# - AI classify -> rewrite -> enrich (summary + expert tips).
-# - JSON-LD Article, internal links injection, category mapping.
-# - WordPress REST (Application Password). Draft-only.
+"""
+Vietyen Bot v4.3.9
+- FIX: Không lặp "Tóm tắt", bỏ lỗi \n\n; thân bài 700–1000 từ theo chủ đề.
+- "Gợi ý từ chuyên gia" sinh riêng theo nội dung (không lặp câu mẫu).
+- "Nguồn tham khảo": CHỈ còn link bài gốc.
+- Miễn trừ: “Nội dung chỉ tham khảo, không thể thay thế tư vấn y khoa.”
+- Tuỳ chọn làm đẹp tiêu đề bằng prefix (ví dụ: 🩺) qua config.
+"""
 
-import os, re, json, time, hashlib, html
-import logging
+import os, re, json, time, html, logging
 from datetime import datetime, timezone
-from urllib.parse import urlparse
+from typing import Any, Dict, List
 
 import requests
 import feedparser
@@ -21,279 +23,265 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
 session = requests.Session()
-session.headers.update({"User-Agent": "VietyenBot/4.3.7"})
+session.headers.update({"User-Agent": "VietyenBot/4.3.9"})
 
-# ---------- Utils ----------
+# ------------------- Utils -------------------
 
-def load_config(path="config.json"):
+def load_config(path: str = "config.json") -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-
-def http_get(url, timeout=20):
-    for i in range(3):
-        try:
-            r = session.get(url, timeout=timeout)
-            if r.ok:
-                return r.text
-        except Exception as e:
-            logging.warning(f"GET retry {i+1}/3: {e}")
-        time.sleep(1.2 * (i + 1))
-    return None
-
-
-def slugify(text):
+def slugify(text: str) -> str:
     text = re.sub(r"[\s\-]+", "-", re.sub(r"[^\w\s-]", "", text.lower())).strip("-")
     return text[:80]
 
+def strip_tags(html_text: str) -> str:
+    return re.sub(r"<[^>]+>", " ", html_text).replace("&nbsp;", " ").strip()
 
-def hash_of(text):
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+def word_count(html_text: str) -> int:
+    return len(re.findall(r"\w+", strip_tags(html_text)))
 
+# ------------------- OpenAI helper -------------------
 
-# ---------- OpenAI helpers ----------
-def ai_chat(messages, model="gpt-4o-mini", max_tokens=1200, temperature=0.4):
+def ai_chat(messages, model="gpt-4o-mini", max_tokens=1600, temperature=0.5) -> str:
     if not OPENAI_API_KEY:
-        raise RuntimeError("OPENAI_API_KEY missing")
+        raise RuntimeError("Missing OPENAI_API_KEY")
     url = "https://api.openai.com/v1/chat/completions"
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens
-    }
-    r = session.post(url, headers=headers, json=payload, timeout=45)
+    payload = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+    r = session.post(url, headers=headers, json=payload, timeout=60)
     r.raise_for_status()
     return r.json()["choices"][0]["message"]["content"].strip()
 
+# ------------------- AI steps -------------------
 
-def classify_health(topic, cfg):
-    if not cfg.get("ai_check", {}).get("enabled", False):
+def classify_health(title: str, cfg: Dict[str, Any]) -> float:
+    """Return probability the topic is health-related."""
+    ai_cfg = cfg.get("ai_check", {"enabled": True, "model": "gpt-4o-mini", "threshold": 0.6})
+    if not ai_cfg.get("enabled", True):
         return 0.99
-    model = cfg["ai_check"].get("model", "gpt-4o-mini")
     prompt = (
-        "Bạn là bộ phân loại chủ đề. Trả lời một số thực giữa 0-1 theo dạng JSON {\"p_health\": float}.\n"
-        "Câu hỏi: Bài viết sau có thuộc lĩnh vực y tế/sức khoẻ cộng đồng, lâm sàng, dinh dưỡng, phòng bệnh không?\n"
-        f"Tiêu đề: {topic}\n"
-        "Chỉ trả về JSON hợp lệ."
+        "Chấm điểm 0-1 bài viết sau có thuộc lĩnh vực y tế/sức khỏe (lâm sàng, dinh dưỡng, phòng bệnh) hay không. "
+        "Chỉ trả về JSON hợp lệ dạng {\"p_health\": number}.\n"
+        f"Tiêu đề: {title}"
     )
-    msg = [{"role": "user", "content": prompt}]
-    try:
-        raw = ai_chat(msg, model=model, max_tokens=20, temperature=0)
-        m = re.search(r"\{\s*\\"p_health\\"\s*:\s*([0-9.]+)\s*\}", raw)
-        return float(m.group(1)) if m else 0.0
-    except Exception as e:
-        logging.warning(f"Classifier error: {e}")
-        return 0.0
+    raw = ai_chat([{"role": "user", "content": prompt}], model=ai_cfg.get("model", "gpt-4o-mini"), max_tokens=32, temperature=0)
+    m = re.search(r'"p_health"\s*:\s*([0-9.]+)', raw)
+    return float(m.group(1)) if m else 0.0
 
-
-def rewrite_and_enrich(title, body, source_url, cfg):
-    brand = cfg.get("brand", {})
-    author = brand.get("author", "Vietyen Health Desk")
-    publisher = brand.get("publisher", "Vietyen")
-
+def generate_article_json(title: str, source_excerpt: str, source_url: str, cfg: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ask AI to return strict JSON for: summary, body_html (~850 words), expert_tips (3–5).
+    We fully control rendering to avoid duplicates and style issues.
+    """
     sys = (
-        "Viết lại bài báo y tế bằng tiếng Việt tự nhiên, tránh trùng lặp, cấu trúc rõ ràng.\n"
-        "Yêu cầu bắt buộc:\n- 1 đoạn tóm tắt ngắn (50–80 từ) mở đầu dưới tiêu đề phụ 'Tóm tắt'.\n"
-        "- Thân bài 3–6 đoạn, mượt, không liệt kê khô cứng.\n- Mục 'Gợi ý từ chuyên gia' 3–5 gạch đầu dòng, thực hành được.\n"
-        "- Cuối bài có mục 'Nguồn tham khảo' chứa liên kết bài gốc.\n"
-        "- Không thêm khuyến nghị điều trị thay thế tư vấn bác sĩ.\n"
-        "Trả về HTML thuần (không style inline)."
+        "Bạn là biên tập viên trang tin y tế Việt Nam. Viết nghiêm túc, thân thiện, đúng chính tả."
+        " Tuyệt đối KHÔNG chèn CSS/inline style."
     )
     user = (
+        "Hãy viết lại nội dung theo cấu trúc JSON **duy nhất** như sau:\n"
+        "{\n"
+        "  \"summary\": \"60-90 từ, 1 đoạn, không xuống dòng, không chứa ký tự \\n\",\n"
+        "  \"body_html\": \"bài viết 700-1000 từ về chủ đề, chia 4-7 đoạn <p>...</p>, KHÔNG lặp lại phần summary\",\n"
+        "  \"expert_tips\": [\"gợi ý thực hành 1\", \"gợi ý 2\", \"gợi ý 3\"],\n"
+        "  \"keywords\": [\"tối đa 6 từ khóa\"]\n"
+        "}\n\n"
         f"Tiêu đề gốc: {title}\n\n"
-        f"Nội dung gốc (rút trích):\n{body[:2500]}\n\n"
-        f"Liên kết bài gốc: {source_url}\n"
+        f"Trích nội dung nguồn: {source_excerpt[:2200]}\n\n"
+        f"Link gốc: {source_url}\n"
+        "- Lưu ý: 'expert_tips' phải liên quan trực tiếp tới chủ đề bài.\n"
+        "- Không thêm lời mở đầu/ghi chú ngoài JSON. Trả về JSON hợp lệ duy nhất."
     )
-    messages = [
-        {"role": "system", "content": sys},
-        {"role": "user", "content": user}
-    ]
-    html_body = ai_chat(messages, model=cfg.get("ai_check", {}).get("model", "gpt-4o-mini"), max_tokens=1300)
+    model = cfg.get("ai_check", {}).get("model", "gpt-4o-mini")
+    raw = ai_chat([{"role": "system", "content": sys}, {"role": "user", "content": user}], model=model, max_tokens=1800, temperature=0.6)
 
-    # Inject internal links (simple rule-based)
-    html_body = inject_internal_links(html_body, cfg)
+    # Try to extract JSON robustly
+    jtxt = raw
+    m = re.search(r"\{.*\}", raw, flags=re.S)
+    if m: jtxt = m.group(0)
+    data = json.loads(jtxt)
 
-    # Build JSON-LD
-    json_ld = build_jsonld(title, source_url, cfg)
+    # Post-fix: sanitize summary \n and spaces
+    data["summary"] = re.sub(r"\s+", " ", str(data.get("summary", "")).replace("\\n", " ")).strip()
+    # Ensure body length target
+    wc = word_count(data.get("body_html", ""))
+    if wc < 700 or wc > 1100:
+        target = 850
+        adjust = "mở rộng" if wc < 700 else "rút gọn"
+        fix_user = (
+            f"Bài body hiện {wc} từ, hãy {adjust} thành khoảng {target} từ, giữ nguyên nội dung và cấu trúc đoạn.\n"
+            "Trả về CHỈ phần body_html (HTML gồm <p>…</p>), không lặp lại summary hay expert_tips."
+        )
+        fixed = ai_chat(
+            [{"role": "system", "content": "Bạn là biên tập viên y tế, chỉnh sửa độ dài nội dung."},
+             {"role": "user", "content": strip_tags(data.get("body_html", "")) + "\n\n" + fix_user}],
+            model=model, max_tokens=1400, temperature=0.5
+        )
+        # keep only paragraph HTML
+        mm = re.findall(r"<p>.*?</p>", fixed, flags=re.S|re.I)
+        if mm:
+            data["body_html"] = "\n".join(mm)
+    return data
 
-    # Compose final content
-    final_html = f"{html_body}\n\n<script type=\"application/ld+json\">{json_ld}</script>"
-    # Extract excerpt from Tóm tắt block for WP excerpt
-    excerpt = extract_excerpt(html_body)
-    return final_html, excerpt, author, publisher
+# ------------------- WordPress REST -------------------
 
-
-def extract_excerpt(html_body):
-    m = re.search(r"<h2[^>]*>\s*Tóm\s*tắt\s*</h2>\s*<p>(.*?)</p>", html_body, flags=re.I|re.S)
-    if m:
-        text = re.sub(r"<[^>]+>", "", m.group(1))
-        return text.strip()[:300]
-    # Fallback: first paragraph
-    m = re.search(r"<p>(.*?)</p>", html_body, flags=re.S)
-    return re.sub(r"<[^>]+>", "", m.group(1)).strip()[:300] if m else ""
-
-
-def inject_internal_links(html_body, cfg):
-    links = cfg.get("internal_links", [])
-    max_total = cfg.get("post", {}).get("max_internal_links", 3)
-    used = 0
-    for item in links:
-        if used >= max_total: break
-        kw = item.get("keyword")
-        url = item.get("url")
-        limit = int(item.get("max_per_post", 1))
-        # replace first occurrences outside headings
-        def repl(match, _url=url):
-            nonlocal used
-            if used >= max_total: return match.group(0)
-            used += 1
-            return f"<a href=\"{_url}\" rel=\"noopener internal\">{match.group(0)}</a>"
-        html_body = re.sub(rf"(?i)(?<![\w>])({re.escape(kw)})", repl, html_body, count=limit)
-    return html_body
-
-
-def build_jsonld(headline, source_url, cfg):
-    brand = cfg.get("brand", {})
-    logo = brand.get("logo_url", "")
-    publisher = brand.get("publisher", "Vietyen")
-    now_iso = datetime.now(timezone.utc).isoformat()
-    data = {
-        "@context": "https://schema.org",
-        "@type": "Article",
-        "headline": headline[:110],
-        "image": cfg.get("default_hero_url"),
-        "datePublished": now_iso,
-        "dateModified": now_iso",
-        "mainEntityOfPage": source_url,
-        "publisher": {
-            "@type": "Organization",
-            "name": publisher,
-            "logo": {"@type": "ImageObject", "url": logo}
-        }
-    }
-    return json.dumps(data, ensure_ascii=False)
-
-
-# ---------- WordPress REST ----------
-def wp_auth():
+def wp_auth() -> Dict[str, str]:
     from base64 import b64encode
     token = b64encode(f"{WP_USER}:{WP_APP_PW}".encode()).decode()
     return {"Authorization": f"Basic {token}"}
 
-
-def wp_find_similar(slug):
+def wp_find_similar(slug: str) -> List[str]:
     url = f"{WP_URL}/wp-json/wp/v2/posts?status=draft,pending,publish&search={slug}&per_page=5"
     r = session.get(url, headers=wp_auth(), timeout=20)
     if r.ok:
-        try:
-            return [p.get("slug", "") for p in r.json()]
-        except Exception:
-            return []
+        try: return [p.get("slug", "") for p in r.json()]
+        except Exception: return []
     return []
 
-
-def wp_create_post(title, content, excerpt, categories=None, featured_media=None, status="draft"):
-    payload = {
-        "title": title,
-        "content": content,
-        "excerpt": excerpt,
-        "status": status
-    }
-    if categories:
-        payload["categories"] = categories
-    if featured_media:
-        payload["featured_media"] = featured_media
+def wp_create_post(title: str, content: str, excerpt: str, categories=None, status="draft") -> Dict[str, Any]:
+    payload = {"title": title, "content": content, "excerpt": excerpt, "status": status}
+    if categories: payload["categories"] = categories
     url = f"{WP_URL}/wp-json/wp/v2/posts"
-    r = session.post(url, headers={**wp_auth(), "Content-Type": "application/json"}, json=payload, timeout=30)
+    r = session.post(url, headers={**wp_auth(), "Content-Type": "application/json"}, json=payload, timeout=45)
     r.raise_for_status()
     return r.json()
 
+# ------------------- Compose HTML -------------------
 
-# ---------- Category mapping ----------
-def map_categories(title, cfg):
+def compose_html(data: Dict[str, Any], source_url: str, cfg: Dict[str, Any]) -> (str, str):
+    """
+    Build final HTML with sections:
+    - Tóm tắt (once only)
+    - Body (from AI JSON)
+    - Gợi ý từ chuyên gia
+    - Nguồn tham khảo (link only)
+    - Miễn trừ trách nhiệm (fixed text)
+    - JSON-LD (minimal)
+    """
+    summary = data.get("summary", "")
+    body_html = data.get("body_html", "")
+    tips = [t for t in data.get("expert_tips", []) if t.strip()]
+
+    # 1) Summary block (only once)
+    html_summary = (
+        '<h2>Tóm tắt</h2>'
+        f'<p>{html.escape(summary)}</p>'
+    )
+
+    # 2) Body (already HTML paragraphs). Ensure it does NOT echo summary:
+    body_plain = strip_tags(body_html)
+    if summary and summary[:80] in body_plain[: max(len(summary), 200)]:
+        # remove first paragraph if duplicating summary
+        body_html = re.sub(r"^<p>.*?</p>\s*", "", body_html, flags=re.S)
+
+    # 3) Expert tips
+    tips_li = "".join(f"<li>{html.escape(t)}</li>" for t in tips[:5])
+    html_tips = f"<h2>Gợi ý từ chuyên gia</h2><ul>{tips_li}</ul>" if tips_li else ""
+
+    # 4) Source + Disclaimer
+    html_source = f"<h2>Nguồn tham khảo</h2><ul><li><a href=\"{source_url}\">{source_url}</a></li></ul>"
+    html_disclaimer = "<p><em>Miễn trừ trách nhiệm: Nội dung chỉ tham khảo, không thể thay thế tư vấn y khoa.</em></p>"
+
+    # 5) JSON-LD (minimal)
+    json_ld = {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": "",  # set later at create_post
+        "datePublished": datetime.now(timezone.utc).isoformat(),
+        "mainEntityOfPage": source_url,
+        "publisher": {
+            "@type": "Organization",
+            "name": cfg.get("brand", {}).get("publisher", "Công ty TNHH Thương Mại Việt Yến"),
+            "logo": {"@type": "ImageObject", "url": cfg.get("brand", {}).get("logo_url", "")}
+        }
+    }
+    json_ld_tag = f"<script type=\"application/ld+json\">{json.dumps(json_ld, ensure_ascii=False)}</script>"
+
+    final_html = "\n".join([html_summary, body_html, html_tips, html_source, html_disclaimer, json_ld_tag]).strip()
+    excerpt = summary[:300]
+    return final_html, excerpt
+
+# ------------------- Category mapping -------------------
+
+def map_categories(title: str, cfg: Dict[str, Any]):
     cats = cfg.get("categories", [])
-    selected = []
     t = title.lower()
+    selected = []
     for c in cats:
         for kw in c.get("keywords", []):
             if kw.lower() in t:
                 if c.get("id"): selected.append(int(c["id"]))
                 break
-    return list(dict.fromkeys(selected))[:3] or None
+    # unique keep order
+    out, seen = [], set()
+    for x in selected:
+        if x not in seen:
+            out.append(x); seen.add(x)
+    return out[:3] or None
 
+# ------------------- Main -------------------
 
-# ---------- Main run ----------
 def run():
-    cfg = load_config()
     assert WP_URL and WP_USER and WP_APP_PW, "Missing WP_* secrets"
-
+    cfg = load_config()
     feeds = cfg.get("rss_sources", [])
     if not feeds:
         logging.error("No RSS sources configured.")
         return
 
-    picked_item = None
-    picked_feed = None
-
+    picked = None
     for feed_url in feeds:
-        logging.info(f"Parse RSS: {feed_url}")
         d = feedparser.parse(feed_url)
         for e in d.entries[:10]:
-            title = html.unescape(getattr(e, "title", "").strip())
-            link = getattr(e, "link", "").strip()
-            summary = html.unescape(getattr(e, "summary", getattr(e, "description", "")).strip())
-            if not (title and link):
+            title = html.unescape(e.get("title", "").strip())
+            link = e.get("link", "").strip()
+            summary = html.unescape(e.get("summary", e.get("description", "")).strip())
+            if not (title and link): continue
+            if classify_health(title, cfg) < float(cfg.get("ai_check", {}).get("threshold", 0.6)): 
                 continue
-            # Health classifier
-            p = classify_health(title, cfg)
-            if p < float(cfg.get("ai_check", {}).get("threshold", 0.6)):
-                logging.info(f"Skip non-health: {title} (p={p:.2f})")
-                continue
-            picked_item = (title, link, summary)
-            picked_feed = feed_url
-            break
-        if picked_item:
-            break
+            picked = (title, summary, link); break
+        if picked: break
 
-    if not picked_item:
-        logging.warning("No suitable item found today.")
+    if not picked:
+        logging.warning("No suitable item today.")
         return
 
-    title, link, summary = picked_item
+    title, src_excerpt, link = picked
     slug = slugify(title)
-
-    # Deduplicate by search
-    similars = wp_find_similar(slug)
-    if slug in similars:
+    if slug in wp_find_similar(slug):
         logging.info("Similar post exists. Abort.")
         return
 
-    # Rewrite & enrich
-    content_html, excerpt, author, publisher = rewrite_and_enrich(title, summary, link, cfg)
+    # ---- Generate JSON article and compose HTML
+    data = generate_article_json(title, src_excerpt, link, cfg)
+    content_html, excerpt = compose_html(data, link, cfg)
 
-    # Ensure Nguồn tham khảo block exists
-    if "Nguồn tham khảo" not in content_html:
-        content_html += f"\n\n<h2>Nguồn tham khảo</h2><ul><li><a href=\"{link}\">{link}</a></li></ul>"
+    # ---- Title handling (keep original by default; optional pretty prefix)
+    pretty_prefix = cfg.get("title_style", {}).get("prefix", "")  # e.g., "🩺 "
+    mode = cfg.get("title_style", {}).get("mode", "original")     # "original" | "prefixed"
+    final_title = (pretty_prefix + title) if (pretty_prefix and mode == "prefixed") else title
 
-    # Featured image (keep simple: use default hero)
-    featured_media = None  # (Có thể upload ảnh qua media endpoint nếu cần)
-
-    # Category mapping
+    # ---- Category mapping
     cat_ids = map_categories(title, cfg)
 
-    post = wp_create_post(
-        title=title,
-        content=content_html,
-        excerpt=excerpt,
-        categories=cat_ids,
-        featured_media=featured_media,
-        status=cfg.get("post", {}).get("status", "draft")
-    )
+    # ---- Create draft post
+    post = wp_create_post(final_title, content_html, excerpt, categories=cat_ids, status=cfg.get("post", {}).get("status", "draft"))
+    logging.info(f"Draft created: {post.get('link')} (ID {post.get('id')})")
 
-    logging.info(f"Created draft post ID: {post.get('id')} — {post.get('link')}")
+# -------------------
 
+def wp_create_post(title: str, content: str, excerpt: str, categories=None, status="draft") -> Dict[str, Any]:
+    payload = {"title": title, "content": content, "excerpt": excerpt, "status": status}
+    if categories: payload["categories"] = categories
+    url = f"{WP_URL}/wp-json/wp/v2/posts"
+    r = session.post(url, headers={**wp_auth(), "Content-Type": "application/json"}, json=payload, timeout=45)
+    r.raise_for_status()
+    return r.json()
+
+def wp_auth() -> Dict[str, str]:
+    from base64 import b64encode
+    token = b64encode(f"{WP_USER}:{WP_APP_PW}".encode()).decode()
+    return {"Authorization": f"Basic {token}"}
 
 if __name__ == "__main__":
     try:
