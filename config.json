@@ -1,5 +1,5 @@
 {
-  "version": "4.3.3",
+  "version": "4.3.4",
   "post_status": "draft",
   "category_id": null,
   "tags_by_name": [
@@ -7,8 +7,7 @@
     "y tế"
   ],
   "image_policy": {
-    "min_images": 2,
-    "insert_position": "after_bullets"
+    "min_images": 1
   },
   "ai_check": {
     "enabled": true,
@@ -47,8 +46,7 @@
         "dự phòng"
       ],
       "fallback_images": [
-        "https://source.unsplash.com/1600x900/?medical,health",
-        "https://source.unsplash.com/1200x800/?clinic,healthcare"
+        "https://source.unsplash.com/1600x900/?medical,health"
       ]
     },
     {
@@ -62,10 +60,13 @@
         "thị lực"
       ],
       "fallback_images": [
-        "https://source.unsplash.com/1600x900/?eye,clinic",
-        "https://source.unsplash.com/1200x800/?eyecare,health"
+        "https://source.unsplash.com/1600x900/?eye,clinic"
       ]
     }
   ],
-  "default_hero_url": "https://source.unsplash.com/1600x900/?medical,health"
+  "default_hero_url": "https://source.unsplash.com/1600x900/?medical,health",
+  "brand": {
+    "site_name": "VietYenLTD Health Desk",
+    "publisher_logo": "https://vietyenltd.com/wp-content/uploads/logo.png"
+  }
 }
