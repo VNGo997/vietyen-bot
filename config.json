@@ -2,42 +2,57 @@
   "demo_mode": true,
   "post_status": "draft",
   "category_id": null,
-  "category_name": null,
   "tags_by_name": [
     "sức khỏe",
     "y tế",
     "nhãn khoa"
   ],
-  "default_hero_url": "https://source.unsplash.com/1600x900/?medical,health",
-  "images": {
-    "hero": "",
-    "mid": ""
+  "image_policy": {
+    "min_images": 2,
+    "insert_position": "after_bullets"
   },
-  "expert_tip": {
-    "enabled": true,
-    "position": "after_bullets",
-    "product_name": "Gạc vệ sinh bờ mi Visionary",
-    "product_url": "https://vietyenltd.com/san-pham/gac-ve-sinh-bo-mi-visionary/",
-    "text": null
-  },
-  "seo": {
-    "yoast_title": "Gạc vệ sinh bờ mi Visionary – Làm sạch dịu nhẹ mỗi ngày",
-    "yoast_description": "Gạc vệ sinh bờ mi Visionary giúp làm sạch bã nhờn & bụi mịn quanh mí, hỗ trợ giảm cộm rát. Dịu nhẹ, tiện dùng."
-  },
-  "demo_title": "Chăm sóc mắt khi dùng màn hình nhiều (demo)",
   "topics": [
     {
       "name": "nhãn khoa",
       "match": [
         "mắt",
-        "nhãn khoa",
         "bờ mi",
-        "khô mắt"
+        "khô mắt",
+        "viêm kết mạc",
+        "nhãn khoa",
+        "thị lực"
       ],
       "fallback_images": [
-        "https://source.unsplash.com/1600x900/?eye,health",
-        "https://source.unsplash.com/1200x800/?eyelid,care"
+        "https://source.unsplash.com/1600x900/?eye,clinic",
+        "https://source.unsplash.com/1200x800/?eyecare,health"
+      ]
+    },
+    {
+      "name": "tim mạch",
+      "match": [
+        "tim mạch",
+        "huyết áp",
+        "mạch vành",
+        "đột quỵ"
+      ],
+      "fallback_images": [
+        "https://source.unsplash.com/1600x900/?cardiology,medical",
+        "https://source.unsplash.com/1200x800/?heart,health"
+      ]
+    },
+    {
+      "name": "da liễu",
+      "match": [
+        "da liễu",
+        "viêm da",
+        "mụn",
+        "dị ứng da"
+      ],
+      "fallback_images": [
+        "https://source.unsplash.com/1600x900/?dermatology,clinic",
+        "https://source.unsplash.com/1200x800/?skin,health"
       ]
     }
-  ]
+  ],
+  "default_hero_url": "https://source.unsplash.com/1600x900/?medical,health"
 }

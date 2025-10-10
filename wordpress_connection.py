@@ -1,113 +1,53 @@
-import os, base64, time, json, requests
-from dataclasses import dataclass
+import os, base64, requests
 
-class WPClientError(Exception): pass
-
-@dataclass
 class WPClient:
-    base_url: str
-    username: str
-    app_password: str
+    def __init__(self, base_url: str, username: str, app_password: str):
+        self.base_url = base_url.rstrip('/')
+        token = f"{username}:{app_password}".encode("utf-8")
+        self.headers = {"Authorization": "Basic " + base64.b64encode(token).decode("utf-8")}
 
-    def _headers(self):
-        token = base64.b64encode(f"{self.username}:{self.app_password}".encode()).decode()
-        return {
-            "Authorization": f"Basic {token}",
-            "Content-Type": "application/json"
-        }
-
-    def _url(self, path):
-        return self.base_url.rstrip("/") + path
-
-    def _req(self, method, path, **kwargs):
-        url = self._url(path)
-        for attempt in range(4):
-            try:
-                r = requests.request(method, url, headers=self._headers(), timeout=30, **kwargs)
-                if 200 <= r.status_code < 300:
-                    return r
-                if r.status_code in (429, 500, 502, 503, 504):
-                    time.sleep(2 + attempt)
-                    continue
-                raise WPClientError(f"{method} {url} -> {r.status_code} {r.text[:200]}")
-            except requests.RequestException as e:
-                if attempt == 3:
-                    raise WPClientError(f"Network error on {method} {url}: {e}")
-                time.sleep(2 + attempt)
-        raise WPClientError("Unreachable")
-
-    def upload_media_from_url(self, img_url, filename="image.jpg", retries=2):
-        if not img_url:
-            return None
-        for attempt in range(retries+1):
-            try:
-                data = requests.get(img_url, timeout=30).content
-                break
-            except Exception as e:
-                if attempt == retries:
-                    raise WPClientError(f"Download failed: {e}")
-                time.sleep(2+attempt)
-        headers = self._headers()
-        headers.update({"Content-Type": "image/jpeg", "Content-Disposition": f'attachment; filename="{filename}"'})
-        r = self._req("POST", "/wp-json/wp/v2/media", data=data, headers=headers)
+    def upload_media_from_url(self, image_url: str, filename: str = "hero.jpg"):
+        if not image_url: return None
+        try:
+            img = requests.get(image_url, timeout=30)
+            img.raise_for_status()
+        except Exception as e:
+            print("[WARN] download image fail:", e); return None
+        headers = self.headers.copy()
+        headers.update({"Content-Disposition": f'attachment; filename="{filename}"', "Content-Type": "image/jpeg"})
+        r = requests.post(f"{self.base_url}/wp-json/wp/v2/media", headers=headers, data=img.content, timeout=60)
+        if r.status_code >= 400:
+            print("[WARN] upload media fail:", r.status_code, r.text[:200]); return None
         return r.json().get("id")
 
     def create_or_get_tags(self, tag_names):
+        if not tag_names: return []
         ids = []
-        if not tag_names: return ids
-        existing = {}
-        page = 1
-        while True:
-            r = self._req("GET", f"/wp-json/wp/v2/tags?per_page=100&page={page}")
-            arr = r.json()
-            if not arr: break
-            for t in arr:
-                existing[t["name"].lower()] = t["id"]
-            if len(arr) < 100: break
-            page += 1
         for name in tag_names:
-            key = name.lower().strip()
-            if key in existing:
-                ids.append(existing[key])
-            else:
-                r = self._req("POST", "/wp-json/wp/v2/tags", json={"name": name})
-                ids.append(r.json().get("id"))
+            q = requests.get(f"{self.base_url}/wp-json/wp/v2/tags", headers=self.headers, params={"search": name, "per_page": 10}, timeout=30)
+            if q.status_code < 300:
+                found = [t for t in q.json() if t.get("name","").lower() == name.lower()]
+                if found:
+                    ids.append(found[0]["id"]); continue
+            c = requests.post(f"{self.base_url}/wp-json/wp/v2/tags", headers={**self.headers, "Content-Type":"application/json"}, json={"name": name}, timeout=30)
+            if c.status_code < 300:
+                ids.append(c.json()["id"])
         return ids
 
-    def ensure_category(self, name):
-        if not name: return None
-        r = self._req("GET", f"/wp-json/wp/v2/categories?search={name}")
-        arr = r.json()
-        for c in arr:
-            if c.get("name","").lower() == name.lower():
-                return c["id"]
-        r = self._req("POST", "/wp-json/wp/v2/categories", json={"name": name})
-        return r.json().get("id")
-
-    def post_article(self, title, content, status="draft", category_id=None, tag_ids=None, featured_media=None):
-        payload = {
-            "title": title,
-            "content": content,
-            "status": status
-        }
-        if category_id:
-            payload["categories"] = [category_id]
-        if tag_ids:
-            payload["tags"] = tag_ids
-        if featured_media:
-            payload["featured_media"] = featured_media
-        r = self._req("POST", "/wp-json/wp/v2/posts", json=payload)
-        return r.json()
-
-    def update_post_meta(self, post_id, meta: dict):
-        payload = {"meta": meta}
-        r = self._req("POST", f"/wp-json/wp/v2/posts/{post_id}", json=payload)
+    def post_article(self, title: str, content_html: str, status: str = "draft", category_id=None, tag_ids=None, featured_media=None):
+        payload = {"title": title, "content": content_html, "status": status}
+        if category_id is not None: payload["categories"] = [category_id] if isinstance(category_id, int) else category_id
+        if tag_ids: payload["tags"] = tag_ids
+        if featured_media: payload["featured_media"] = featured_media
+        r = requests.post(f"{self.base_url}/wp-json/wp/v2/posts", headers={**self.headers, "Content-Type":"application/json"}, json=payload, timeout=60)
+        if r.status_code >= 400:
+            raise RuntimeError(f"WP post failed: {r.status_code} - {r.text[:200]}")
         return r.json()
 
 def get_wp_from_env():
-    base = os.getenv("WP_BASE_URL", "").strip()
-    user = os.getenv("WP_USER", "").strip()
-    pw   = os.getenv("WP_APP_PW", "").strip()
-    if not base or not user or not pw:
-        raise WPClientError("Missing env: WP_BASE_URL / WP_USER / WP_APP_PW")
-    return WPClient(base, user, pw)
+    base_url = os.getenv("WP_URL")
+    username = os.getenv("WP_USERNAME")
+    app_pw = os.getenv("WP_APP_PASSWORD")
+    if not all([base_url, username, app_pw]):
+        raise EnvironmentError("Missing WP_URL, WP_USERNAME or WP_APP_PASSWORD environment variables.")
+    return WPClient(base_url, username, app_pw)
