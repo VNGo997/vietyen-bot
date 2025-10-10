@@ -1,41 +1,43 @@
 {
+  "demo_mode": true,
   "post_status": "draft",
   "category_id": null,
+  "category_name": null,
   "tags_by_name": [
-    "suc khoe",
-    "y te",
-    "nhan khoa"
-  ],
-  "topics": [
-    {
-      "name": "nhan khoa",
-      "match": [
-        "mat",
-        "bo mi",
-        "kho mat",
-        "viem ket mac",
-        "nhan khoa",
-        "thi luc"
-      ],
-      "fallback_images": [
-        "https://source.unsplash.com/1600x900/?eye,clinic",
-        "https://source.unsplash.com/1200x800/?eyecare,health"
-      ]
-    }
+    "sức khỏe",
+    "y tế",
+    "nhãn khoa"
   ],
   "default_hero_url": "https://source.unsplash.com/1600x900/?medical,health",
-  "expert_advice": {
-    "default": {
-      "title": "Goi y tu chuyen gia",
-      "lead": "Duy tri ve sinh dung cach va nghi ngoi dieu do moi ngay.",
-      "product_label": "Xem them san pham",
-      "product_url": "https://vietyenltd.com/san-pham/"
-    },
-    "nhan khoa": {
-      "title": "Goi y tu chuyen gia",
-      "lead": "Lam sach nhe nhang vung bo mi moi ngay giup giam kho mat va viem bo mi.",
-      "product_label": "Gac ve sinh bo mi Visionary",
-      "product_url": "https://vietyenltd.com/san-pham/gac-ve-sinh-bo-mi-visionary/"
+  "images": {
+    "hero": "",
+    "mid": ""
+  },
+  "expert_tip": {
+    "enabled": true,
+    "position": "after_bullets",
+    "product_name": "Gạc vệ sinh bờ mi Visionary",
+    "product_url": "https://vietyenltd.com/san-pham/gac-ve-sinh-bo-mi-visionary/",
+    "text": null
+  },
+  "seo": {
+    "yoast_title": "Gạc vệ sinh bờ mi Visionary – Làm sạch dịu nhẹ mỗi ngày",
+    "yoast_description": "Gạc vệ sinh bờ mi Visionary giúp làm sạch bã nhờn & bụi mịn quanh mí, hỗ trợ giảm cộm rát. Dịu nhẹ, tiện dùng."
+  },
+  "demo_title": "Chăm sóc mắt khi dùng màn hình nhiều (demo)",
+  "topics": [
+    {
+      "name": "nhãn khoa",
+      "match": [
+        "mắt",
+        "nhãn khoa",
+        "bờ mi",
+        "khô mắt"
+      ],
+      "fallback_images": [
+        "https://source.unsplash.com/1600x900/?eye,health",
+        "https://source.unsplash.com/1200x800/?eyelid,care"
+      ]
     }
-  }
+  ]
 }

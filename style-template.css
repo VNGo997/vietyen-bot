@@ -1,1 +1,12 @@
-.vy-article{max-width:900px;margin:0 auto;padding:24px;font-family:system-ui,Segoe UI,Roboto,Arial} .vy-hero{margin:10px 0 18px;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0} .vy-hero img{width:100%;display:block} .vy-note{background:#f3f8ff;border:1px solid #d9e7ff;padding:14px 16px;border-radius:12px;margin:16px 0} .vy-card{background:#f7fbff;border:1px dashed #b9d6ff;border-radius:10px;padding:14px 16px;margin-bottom:20px} .vy-cta{margin:26px 0;background:linear-gradient(135deg,#004aad,#0b73d5);color:#fff;border-radius:12px;padding:24px 20px;text-align:center} .vy-cta a{color:#ffe07a;text-decoration:underline;font-weight:600} .vy-meta{font-size:.9rem;color:#64748b} .vy-badge{display:inline-block;background:#e0f2fe;border:1px solid #bae6fd;color:#0369a1;border-radius:999px;padding:3px 10px;margin-right:8px}
+/* v4.3 — base article styles */
+.vy-article{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.6;color:#0f172a}
+.vy-hero img{width:100%;height:auto;border-radius:16px;margin:4px 0 14px}
+.vy-bullets{padding-left:20px;margin:12px 0}
+.vy-bullets li{margin:6px 0}
+.vy-mid img{width:100%;height:auto;border-radius:12px;margin:10px 0}
+.vy-note{font-size:12px;color:#475569;background:#f8fafc;border-left:3px solid #93c5fd;padding:10px;border-radius:8px;margin-top:16px}
+
+/* Expert tip block */
+.vy-expert-tip{border:1px dashed #d0e2ff;background:#f7fbff;padding:14px 16px;border-radius:14px;margin:16px 0}
+.vy-expert-badge{font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#2563eb;background:#e8f0ff;display:inline-block;padding:4px 10px;border-radius:999px;margin-bottom:8px}
+.vy-expert-tip a{text-decoration:underline}
