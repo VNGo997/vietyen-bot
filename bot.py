@@ -1,16 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-vietyen-bot v4.3
-- Lọc RSS sức khỏe
-- AI check chủ đề (tùy chọn, qua OPENAI_API_KEY)
-- Chèn ảnh minh họa (Unsplash, không cần API)
-- Tạo bài viết bản nháp lên WordPress (Application Password)
-- Tự chèn liên kết nội bộ theo từ khóa
+vietyen-bot v4.3.3
+- Giữ nguyên workflow 4.2b
+- Có AI check + Expert Tip AI + 1 bài/ngày + Visionary UI
+- Có wordpress_connection.py tương thích
 """
-import os, re, json, time, html
+import os, re, json, html, random, requests
 from typing import List, Dict, Any, Optional
-import requests
 
 try:
     import feedparser
@@ -19,194 +16,132 @@ except Exception:
 
 CONFIG_PATH = os.environ.get("BOT_CONFIG_PATH", "config.json")
 
-def load_config() -> Dict[str, Any]:
+def load_config():
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def ai_health_gate(text: str, cfg: Dict[str, Any]) -> bool:
-    settings = cfg.get("ai_check", {})
-    if not settings.get("enabled"):
-        return True
+def keyword_gate(text):
+    t = text.lower()
+    keys = ["sức khỏe","y tế","bệnh","điều trị","dự phòng","triệu chứng","chẩn đoán",
+            "nhãn khoa","bờ mi","khô mắt","viêm","thuốc","bác sĩ","bệnh viện",
+            "phòng bệnh","vaccine","dinh dưỡng","tim mạch","da liễu","nhi khoa"]
+    return any(k in t for k in keys)
+
+def ai_health_gate(text, cfg):
+    s = cfg.get("ai_check", {})
+    if not s.get("enabled"): return True
     api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return keyword_gate(text)
-    prompt = settings.get("prompt", "Chỉ trả về Y nếu là y tế, N nếu không.")
-    model = settings.get("model", "gpt-4o-mini")
+    if not api_key: return keyword_gate(text)
     try:
-        resp = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            },
+        r = requests.post("https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
-                "model": model,
+                "model": s.get("model", "gpt-4o-mini"),
                 "messages": [
-                    {"role": "system", "content": "You are a concise content gatekeeper. Answer with a single letter."},
-                    {"role": "user", "content": prompt + "\n\n" + text[:6000]}
+                    {"role": "system", "content": "Answer Y or N only."},
+                    {"role": "user", "content": s.get("prompt","") + "\n\n" + text[:6000]}
                 ],
                 "temperature": 0
-            },
-            timeout=30
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        answer = data["choices"][0]["message"]["content"].strip().upper()
-        return answer.startswith("Y")
+            }, timeout=30)
+        ans = r.json()["choices"][0]["message"]["content"].strip().upper()
+        return ans.startswith("Y")
     except Exception:
         return keyword_gate(text)
 
-def keyword_gate(text: str) -> bool:
-    text_low = text.lower()
-    keywords = [
-        "sức khỏe","y tế","bệnh","điều trị","dự phòng","triệu chứng","chẩn đoán",
-        "nhãn khoa","bờ mi","khô mắt","viêm","thuốc","bác sĩ","bệnh viện",
-        "phòng bệnh","vaccine","dinh dưỡng","tim mạch","da liễu","nhi khoa"
-    ]
-    return any(k in text_low for k in keywords)
+def ai_expert_tip(title, text, cfg, link_rule):
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key: return fallback_tip(link_rule)
+    try:
+        cta = f"Sản phẩm gợi ý: {link_rule.get('title')}" if link_rule else ""
+        prompt = f"Bạn là chuyên gia y tế, viết 3–5 câu khuyên ngắn thực tế, tiếng Việt, dễ hiểu. {cta}\n\nTiêu đề: {title}\n\nNội dung: {text[:1200]}"
+        r = requests.post("https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": cfg.get("ai_check",{}).get("model","gpt-4o-mini"),
+                "messages":[{"role":"user","content":prompt}],
+                "temperature":0.4
+            },timeout=30)
+        return html.escape(r.json()["choices"][0]["message"]["content"].strip())
+    except Exception:
+        return fallback_tip(link_rule)
 
-def pick_images(cfg: Dict[str, Any], content: str) -> List[str]:
-    text_low = content.lower()
+def fallback_tip(rule):
+    t = "Duy trì lối sống điều độ, theo dõi triệu chứng và ưu tiên chăm sóc tại nhà. Nếu không cải thiện, hãy liên hệ bác sĩ."
+    if rule: t += f" Sản phẩm hỗ trợ như {html.escape(rule.get('title'))} có thể giúp cải thiện hiệu quả."
+    return t
+
+def pick_images(cfg, text):
+    t = text.lower()
     for tp in cfg.get("topics", []):
-        for m in tp.get("match", []):
-            if m.lower() in text_low:
-                return tp.get("fallback_images", [])
+        if any(k in t for k in tp.get("match", [])): return tp["fallback_images"]
     return [cfg.get("default_hero_url")]
 
-def build_html(post_title: str, post_body: str, images: List[str], cfg: Dict[str, Any]) -> str:
-    hero = images[0] if images else cfg.get("default_hero_url")
-    mid_img = images[1] if len(images) > 1 else None
-    caption = "Ảnh minh hoạ: Unsplash"
-    bullets_html = ""
-    import re as _re
-    bullets = _re.findall(r"^[\-–•]\s*(.+)$", post_body, flags=_re.MULTILINE)
-    if bullets:
-        li = "\n".join([f"<li>✅ {html.escape(b)}</li>" for b in bullets[:6]])
-        bullets_html = (
-            '<h2 style="color:#004aad;border-bottom:2px solid #e1edff;padding-bottom:6px">💡 Điều bạn cần lưu ý</h2>'
-            '<ul style="list-style:none;padding-left:0;line-height:1.75;margin:10px 0 22px">'
-            + li + "</ul>"
-        )
-    core = html.escape(post_body).replace("\n","<br>")
-    mid_html = ""
-    if mid_img:
-        mid_html = (
-            '<figure style="margin:16px 0 18px">'
-            f'<img src="{mid_img}" alt="" style="width:100%;height:auto;border-radius:14px;object-fit:cover;">'
-            f'<figcaption style="text-align:center;color:#667;font-size:13px;margin-top:6px">{caption}</figcaption>'
-            '</figure>'
-        )
-    html_doc = (
-        "<!-- HERO -->"
-        '<figure style="margin:0 0 18px">'
-        f'<img src="{hero}" alt="" style="width:100%;height:auto;border-radius:14px;object-fit:cover;">'
-        f'<figcaption style="text-align:center;color:#667;font-size:13px;margin-top:6px">{caption}</figcaption>'
-        '</figure>'
-        '<div style="background:linear-gradient(90deg,#eaf2ff,#f7fbff);border:1px solid #d9e7ff;border-radius:12px;padding:14px 16px;margin:16px 0">'
-        '<strong style="color:#004aad">🩺 Tóm tắt ngắn gọn:</strong> Bài viết sức khỏe được biên tập ngắn gọn theo chuẩn Visionary.'
-        '</div>'
-        + bullets_html + mid_html +
-        '<div style="margin-top:20px">' + core + '</div>'
-    )
-    return html_doc
-
-def inject_internal_link(html_doc: str, cfg: Dict[str, Any], raw_text: str) -> str:
-    txt = raw_text.lower()
-    blocks = []
-    for rule in cfg.get("internal_links", []):
-        if any(k.lower() in txt for k in rule.get("keywords", [])):
-            box = (
-                '<div style="margin:26px 0;background:linear-gradient(135deg,#004aad,#0b73d5);color:#fff;border-radius:12px;padding:18px;text-align:center">'
-                '<div style="font-size:18px;font-weight:700;margin-bottom:6px">💬 Gợi ý từ chuyên gia</div>'
-                f'<div>Tham khảo: <a href="{html.escape(rule["url"])}" style="color:#ffe07a;text-decoration:underline">{html.escape(rule["title"])}</a></div>'
-                '</div>'
-            )
-            blocks.append(box)
-    if blocks:
-        html_doc += "".join(blocks)
-    footer = (
-        '<div style="border:1px solid #e8eefc;border-radius:12px;padding:14px 16px;background:#fbfdff;margin-top:24px">'
-        '<p style="margin:0 0 8px"><span style="color:#004aad">🔗 Nguồn tham khảo:</span> Tổng hợp từ các nguồn chính thống về sức khỏe.</p>'
-        '<p style="margin:0;color:#667;font-size:14px">⚠️ <strong>Miễn trừ trách nhiệm:</strong> Nội dung chỉ tham khảo, không thay thế tư vấn y khoa.</p>'
-        '</div>'
-    )
-    return html_doc + footer
-
-def wp_create_draft(title: str, content: str, tags: List[str], cfg: Dict[str, Any]) -> Optional[int]:
-    wp_url = os.environ.get("WP_URL", "").rstrip("/")
-    user = os.environ.get("WP_USERNAME")
-    app_pw = os.environ.get("WP_APP_PASSWORD")
-    if not (wp_url and user and app_pw):
-        print("Thiếu WP_URL/WP_USERNAME/WP_APP_PASSWORD → bỏ qua đăng bài.")
-        return None
-    tag_ids = []
-    try:
-        for t in tags:
-            r = requests.get(f"{wp_url}/wp-json/wp/v2/tags", params={"search": t, "per_page": 1}, auth=(user, app_pw), timeout=20)
-            if r.ok and r.json():
-                tag_ids.append(r.json()[0]["id"])
-            else:
-                cr = requests.post(f"{wp_url}/wp-json/wp/v2/tags", json={"name": t}, auth=(user, app_pw), timeout=20)
-                if cr.ok:
-                    tag_ids.append(cr.json()["id"])
-    except Exception as e:
-        print("Tạo/gán tag lỗi:", e)
-
-    payload = {"title": title, "content": content, "status": "draft", "tags": tag_ids}
-    cat_id = cfg.get("category_id")
-    if cat_id:
-        payload["categories"] = [cat_id]
-    try:
-        pr = requests.post(f"{wp_url}/wp-json/wp/v2/posts", json=payload, auth=(user, app_pw), timeout=30)
-        if pr.ok:
-            pid = pr.json().get("id")
-            print("Đã tạo bản nháp ID:", pid)
-            return pid
-        else:
-            print("Lỗi tạo bài:", pr.status_code, pr.text[:300])
-    except Exception as e:
-        print("Lỗi kết nối WordPress:", e)
+def find_link_rule(cfg, text):
+    t = text.lower()
+    for r in cfg.get("internal_links", []):
+        if any(k in t for k in r.get("keywords", [])): return r
     return None
 
-def fetch_rss_items(urls: List[str], limit_per_feed: int = 5) -> List[Dict[str, Any]]:
-    items = []
+def build_html(title, body, imgs, cfg, tip_html, rule):
+    hero = imgs[0] if imgs else cfg.get("default_hero_url")
+    mid = imgs[1] if len(imgs)>1 else None
+    cap = "Ảnh minh hoạ: Unsplash"
+    bullets = re.findall(r"^[\-–•]\s*(.+)$", body, flags=re.M)
+    li = ''.join([f"<li>✅ {html.escape(b)}</li>" for b in bullets[:6]]) if bullets else ""
+    mid_html = f'<figure><img src="{mid}" style="width:100%;border-radius:14px;"><figcaption>{cap}</figcaption></figure>' if mid else ""
+    expert = f'<div style="margin:26px 0;background:linear-gradient(135deg,#004aad,#0b73d5);color:#fff;border-radius:12px;padding:18px;"><div style="font-size:18px;font-weight:700;margin-bottom:6px">💬 Gợi ý từ chuyên gia</div><div style="line-height:1.7">{tip_html}</div>'
+    if rule:
+        expert += f'<div style="margin-top:10px">🌐 Tham khảo: <a href="{html.escape(rule["url"])}" style="color:#ffe07a;text-decoration:underline">{html.escape(rule["title"])}</a></div>'
+    expert += '</div>'
+    footer = '<div style="border:1px solid #e8eefc;border-radius:12px;padding:14px 16px;background:#fbfdff;margin-top:24px"><p><span style="color:#004aad">🔗 Nguồn tham khảo:</span> Tổng hợp từ các nguồn chính thống về sức khỏe.</p><p style="color:#667;font-size:14px">⚠️ <strong>Miễn trừ trách nhiệm:</strong> Nội dung chỉ tham khảo, không thay thế tư vấn y khoa.</p></div>'
+    html_doc = f'''<figure><img src="{hero}" style="width:100%;border-radius:14px;"><figcaption>{cap}</figcaption></figure>
+<div style="background:linear-gradient(90deg,#eaf2ff,#f7fbff);border:1px solid #d9e7ff;border-radius:12px;padding:14px 16px;margin:16px 0"><strong style="color:#004aad">🩺 Tóm tắt ngắn gọn:</strong> Bài viết sức khỏe biên tập theo chuẩn Visionary.</div>
+{('<h2>💡 Điều bạn cần lưu ý</h2><ul>'+li+'</ul>') if li else ''}
+{mid_html}<div>{html.escape(body).replace("\n","<br>")}</div>{expert}{footer}'''
+    return html_doc
+
+def wp_create_draft(title, content, tags, cfg):
+    wp = os.environ.get("WP_URL","").rstrip("/")
+    u = os.environ.get("WP_USERNAME")
+    pw = os.environ.get("WP_APP_PASSWORD")
+    if not (wp and u and pw):
+        print("Thiếu thông tin WordPress."); return None
     try:
-        import feedparser
-    except Exception:
-        print("feedparser chưa sẵn sàng. Cài đặt: pip install feedparser")
-        return items
+        ids = []
+        for t in tags:
+            r=requests.get(f"{wp}/wp-json/wp/v2/tags",params={"search":t,"per_page":1},auth=(u,pw))
+            if r.ok and r.json(): ids.append(r.json()[0]["id"])
+            else:
+                cr=requests.post(f"{wp}/wp-json/wp/v2/tags",json={"name":t},auth=(u,pw))
+                if cr.ok: ids.append(cr.json()["id"])
+        p={"title":title,"content":content,"status":"draft","tags":ids}
+        c=requests.post(f"{wp}/wp-json/wp/v2/posts",json=p,auth=(u,pw))
+        if c.ok: print("Đã tạo bản nháp ID:",c.json()["id"])
+        else: print("Lỗi tạo bài:",c.status_code,c.text[:300])
+    except Exception as e: print("Lỗi WP:",e)
+
+def fetch_rss(urls):
+    try: import feedparser
+    except: return []
+    out=[]
     for u in urls:
         try:
-            d = feedparser.parse(u)
-            for e in d.entries[:limit_per_feed]:
-                title = e.get("title","").strip()
-                summary = e.get("summary","").strip()
-                link = e.get("link","").strip()
-                content = summary or title
-                items.append({"title": title, "content": content, "link": link})
-        except Exception as ex:
-            print("RSS lỗi:", u, ex)
-    return items
+            d=feedparser.parse(u)
+            for e in d.entries[:10]:
+                t=e.get("title","").strip(); s=e.get("summary","").strip(); l=e.get("link","").strip()
+                out.append({"title":t,"content":s or t,"link":l})
+        except Exception: pass
+    return out
 
 def main():
-    cfg = load_config()
-    rss_items = fetch_rss_items(cfg.get("rss_sources", []), limit_per_feed=5)
-    if not rss_items:
-        rss_items = [{
-            "title": "Chăm sóc mắt khi dùng máy tính: giảm khô mỏi hiệu quả",
-            "content": "- Chớp mắt thường xuyên\n- Nghỉ 20-20-20\n- Giữ độ ẩm phòng\n- Vệ sinh bờ mi mỗi ngày\n\nNội dung mẫu.",
-            "link": "https://vietyenltd.com"
-        }]
-    for item in rss_items:
-        raw = f"{item['title']}\n\n{item['content']}"
-        if not keyword_gate(raw):
-            continue
-        if not ai_health_gate(raw, cfg):
-            continue
-        images = pick_images(cfg, raw)
-        html_doc = build_html(item["title"], item["content"], images, cfg)
-        html_doc = inject_internal_link(html_doc, cfg, raw)
-        wp_create_draft(item["title"], html_doc, cfg.get("tags_by_name", []), cfg)
+    cfg=load_config()
+    items=fetch_rss(cfg.get("rss_sources",[]))
+    ok=[i for i in items if keyword_gate(i["title"]+" "+i["content"]) and ai_health_gate(i["title"]+" "+i["content"],cfg)]
+    if not ok: print("Không có bài hợp lệ."); return
+    c=random.choice(ok)
+    imgs=pick_images(cfg,c["content"]); rule=find_link_rule(cfg,c["content"])
+    tip=ai_expert_tip(c["title"],c["content"],cfg,rule)
+    html_doc=build_html(c["title"],c["content"],imgs,cfg,tip,rule)
+    wp_create_draft(c["title"],html_doc,cfg.get("tags_by_name",[]),cfg)
 
-if __name__ == "__main__":
-    main()
+if __name__=="__main__": main()

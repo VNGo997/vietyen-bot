@@ -1,5 +1,5 @@
 {
-  "version": "4.3",
+  "version": "4.3.3",
   "post_status": "draft",
   "category_id": null,
   "tags_by_name": [
@@ -13,8 +13,7 @@
   "ai_check": {
     "enabled": true,
     "model": "gpt-4o-mini",
-    "threshold": 0.6,
-    "prompt": "Bạn là bộ lọc biên tập. Hãy trả lời 'Y' nếu bài viết thuộc chủ đề sức khỏe/y tế (bệnh, điều trị, dự phòng, dinh dưỡng, y tế công cộng, nhãn khoa, tim mạch, da liễu...). Trả lời 'N' nếu không. Chỉ trả về một ký tự Y hoặc N."
+    "prompt": "Bạn là biên tập viên y tế. Trả lời 'Y' nếu nội dung thuộc chủ đề sức khỏe/y tế (bệnh, triệu chứng, điều trị, dự phòng, dinh dưỡng, y tế công cộng, nhãn khoa…). Trả lời 'N' nếu không. Chỉ trả về Y hoặc N."
   },
   "rss_sources": [
     "https://suckhoedoisong.vn/rss.htm",
