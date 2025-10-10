@@ -1,19 +1,59 @@
 {
-  "demo_mode": true,
+  "version": "4.3",
   "post_status": "draft",
   "category_id": null,
   "tags_by_name": [
     "sức khỏe",
-    "y tế",
-    "nhãn khoa"
+    "y tế"
   ],
   "image_policy": {
     "min_images": 2,
     "insert_position": "after_bullets"
   },
+  "ai_check": {
+    "enabled": true,
+    "model": "gpt-4o-mini",
+    "threshold": 0.6,
+    "prompt": "Bạn là bộ lọc biên tập. Hãy trả lời 'Y' nếu bài viết thuộc chủ đề sức khỏe/y tế (bệnh, điều trị, dự phòng, dinh dưỡng, y tế công cộng, nhãn khoa, tim mạch, da liễu...). Trả lời 'N' nếu không. Chỉ trả về một ký tự Y hoặc N."
+  },
+  "rss_sources": [
+    "https://suckhoedoisong.vn/rss.htm",
+    "https://vnexpress.net/rss/suc-khoe.rss",
+    "https://tuoitre.vn/rss/suc-khoe.rss",
+    "https://dantri.com.vn/rss/suc-khoe.rss",
+    "https://vtv.vn/suc-khoe.rss",
+    "https://benhvienmat.vn/rss"
+  ],
+  "internal_links": [
+    {
+      "keywords": [
+        "bờ mi",
+        "viêm bờ mi",
+        "khô mắt",
+        "vệ sinh bờ mi",
+        "mí mắt"
+      ],
+      "title": "Gạc vệ sinh bờ mi Visionary",
+      "url": "https://vietyenltd.com/san-pham/gac-ve-sinh-bo-mi-visionary/"
+    }
+  ],
   "topics": [
     {
-      "name": "nhãn khoa",
+      "name": "y_te_chung",
+      "match": [
+        "sức khỏe",
+        "y tế",
+        "bệnh",
+        "điều trị",
+        "dự phòng"
+      ],
+      "fallback_images": [
+        "https://source.unsplash.com/1600x900/?medical,health",
+        "https://source.unsplash.com/1200x800/?clinic,healthcare"
+      ]
+    },
+    {
+      "name": "nhan_khoa",
       "match": [
         "mắt",
         "bờ mi",
@@ -25,32 +65,6 @@
       "fallback_images": [
         "https://source.unsplash.com/1600x900/?eye,clinic",
         "https://source.unsplash.com/1200x800/?eyecare,health"
-      ]
-    },
-    {
-      "name": "tim mạch",
-      "match": [
-        "tim mạch",
-        "huyết áp",
-        "mạch vành",
-        "đột quỵ"
-      ],
-      "fallback_images": [
-        "https://source.unsplash.com/1600x900/?cardiology,medical",
-        "https://source.unsplash.com/1200x800/?heart,health"
-      ]
-    },
-    {
-      "name": "da liễu",
-      "match": [
-        "da liễu",
-        "viêm da",
-        "mụn",
-        "dị ứng da"
-      ],
-      "fallback_images": [
-        "https://source.unsplash.com/1600x900/?dermatology,clinic",
-        "https://source.unsplash.com/1200x800/?skin,health"
       ]
     }
   ],

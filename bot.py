@@ -1,98 +1,212 @@
-# v4.2b — Post a guaranteed sample health article with 1–2 Unsplash images
-import json, datetime
-from wordpress_connection import get_wp_from_env
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+vietyen-bot v4.3
+- Lọc RSS sức khỏe
+- AI check chủ đề (tùy chọn, qua OPENAI_API_KEY)
+- Chèn ảnh minh họa (Unsplash, không cần API)
+- Tạo bài viết bản nháp lên WordPress (Application Password)
+- Tự chèn liên kết nội bộ theo từ khóa
+"""
+import os, re, json, time, html
+from typing import List, Dict, Any, Optional
+import requests
 
-def detect_topic(title, cfg):
-    for t in cfg.get("topics", []):
-        if any(k.lower() in title.lower() for k in t.get("match", [])):
-            return t
+try:
+    import feedparser
+except Exception:
+    pass
+
+CONFIG_PATH = os.environ.get("BOT_CONFIG_PATH", "config.json")
+
+def load_config() -> Dict[str, Any]:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def ai_health_gate(text: str, cfg: Dict[str, Any]) -> bool:
+    settings = cfg.get("ai_check", {})
+    if not settings.get("enabled"):
+        return True
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return keyword_gate(text)
+    prompt = settings.get("prompt", "Chỉ trả về Y nếu là y tế, N nếu không.")
+    model = settings.get("model", "gpt-4o-mini")
+    try:
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "You are a concise content gatekeeper. Answer with a single letter."},
+                    {"role": "user", "content": prompt + "\n\n" + text[:6000]}
+                ],
+                "temperature": 0
+            },
+            timeout=30
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        answer = data["choices"][0]["message"]["content"].strip().upper()
+        return answer.startswith("Y")
+    except Exception:
+        return keyword_gate(text)
+
+def keyword_gate(text: str) -> bool:
+    text_low = text.lower()
+    keywords = [
+        "sức khỏe","y tế","bệnh","điều trị","dự phòng","triệu chứng","chẩn đoán",
+        "nhãn khoa","bờ mi","khô mắt","viêm","thuốc","bác sĩ","bệnh viện",
+        "phòng bệnh","vaccine","dinh dưỡng","tim mạch","da liễu","nhi khoa"
+    ]
+    return any(k in text_low for k in keywords)
+
+def pick_images(cfg: Dict[str, Any], content: str) -> List[str]:
+    text_low = content.lower()
+    for tp in cfg.get("topics", []):
+        for m in tp.get("match", []):
+            if m.lower() in text_low:
+                return tp.get("fallback_images", [])
+    return [cfg.get("default_hero_url")]
+
+def build_html(post_title: str, post_body: str, images: List[str], cfg: Dict[str, Any]) -> str:
+    hero = images[0] if images else cfg.get("default_hero_url")
+    mid_img = images[1] if len(images) > 1 else None
+    caption = "Ảnh minh hoạ: Unsplash"
+    bullets_html = ""
+    import re as _re
+    bullets = _re.findall(r"^[\-–•]\s*(.+)$", post_body, flags=_re.MULTILINE)
+    if bullets:
+        li = "\n".join([f"<li>✅ {html.escape(b)}</li>" for b in bullets[:6]])
+        bullets_html = (
+            '<h2 style="color:#004aad;border-bottom:2px solid #e1edff;padding-bottom:6px">💡 Điều bạn cần lưu ý</h2>'
+            '<ul style="list-style:none;padding-left:0;line-height:1.75;margin:10px 0 22px">'
+            + li + "</ul>"
+        )
+    core = html.escape(post_body).replace("\n","<br>")
+    mid_html = ""
+    if mid_img:
+        mid_html = (
+            '<figure style="margin:16px 0 18px">'
+            f'<img src="{mid_img}" alt="" style="width:100%;height:auto;border-radius:14px;object-fit:cover;">'
+            f'<figcaption style="text-align:center;color:#667;font-size:13px;margin-top:6px">{caption}</figcaption>'
+            '</figure>'
+        )
+    html_doc = (
+        "<!-- HERO -->"
+        '<figure style="margin:0 0 18px">'
+        f'<img src="{hero}" alt="" style="width:100%;height:auto;border-radius:14px;object-fit:cover;">'
+        f'<figcaption style="text-align:center;color:#667;font-size:13px;margin-top:6px">{caption}</figcaption>'
+        '</figure>'
+        '<div style="background:linear-gradient(90deg,#eaf2ff,#f7fbff);border:1px solid #d9e7ff;border-radius:12px;padding:14px 16px;margin:16px 0">'
+        '<strong style="color:#004aad">🩺 Tóm tắt ngắn gọn:</strong> Bài viết sức khỏe được biên tập ngắn gọn theo chuẩn Visionary.'
+        '</div>'
+        + bullets_html + mid_html +
+        '<div style="margin-top:20px">' + core + '</div>'
+    )
+    return html_doc
+
+def inject_internal_link(html_doc: str, cfg: Dict[str, Any], raw_text: str) -> str:
+    txt = raw_text.lower()
+    blocks = []
+    for rule in cfg.get("internal_links", []):
+        if any(k.lower() in txt for k in rule.get("keywords", [])):
+            box = (
+                '<div style="margin:26px 0;background:linear-gradient(135deg,#004aad,#0b73d5);color:#fff;border-radius:12px;padding:18px;text-align:center">'
+                '<div style="font-size:18px;font-weight:700;margin-bottom:6px">💬 Gợi ý từ chuyên gia</div>'
+                f'<div>Tham khảo: <a href="{html.escape(rule["url"])}" style="color:#ffe07a;text-decoration:underline">{html.escape(rule["title"])}</a></div>'
+                '</div>'
+            )
+            blocks.append(box)
+    if blocks:
+        html_doc += "".join(blocks)
+    footer = (
+        '<div style="border:1px solid #e8eefc;border-radius:12px;padding:14px 16px;background:#fbfdff;margin-top:24px">'
+        '<p style="margin:0 0 8px"><span style="color:#004aad">🔗 Nguồn tham khảo:</span> Tổng hợp từ các nguồn chính thống về sức khỏe.</p>'
+        '<p style="margin:0;color:#667;font-size:14px">⚠️ <strong>Miễn trừ trách nhiệm:</strong> Nội dung chỉ tham khảo, không thay thế tư vấn y khoa.</p>'
+        '</div>'
+    )
+    return html_doc + footer
+
+def wp_create_draft(title: str, content: str, tags: List[str], cfg: Dict[str, Any]) -> Optional[int]:
+    wp_url = os.environ.get("WP_URL", "").rstrip("/")
+    user = os.environ.get("WP_USERNAME")
+    app_pw = os.environ.get("WP_APP_PASSWORD")
+    if not (wp_url and user and app_pw):
+        print("Thiếu WP_URL/WP_USERNAME/WP_APP_PASSWORD → bỏ qua đăng bài.")
+        return None
+    tag_ids = []
+    try:
+        for t in tags:
+            r = requests.get(f"{wp_url}/wp-json/wp/v2/tags", params={"search": t, "per_page": 1}, auth=(user, app_pw), timeout=20)
+            if r.ok and r.json():
+                tag_ids.append(r.json()[0]["id"])
+            else:
+                cr = requests.post(f"{wp_url}/wp-json/wp/v2/tags", json={"name": t}, auth=(user, app_pw), timeout=20)
+                if cr.ok:
+                    tag_ids.append(cr.json()["id"])
+    except Exception as e:
+        print("Tạo/gán tag lỗi:", e)
+
+    payload = {"title": title, "content": content, "status": "draft", "tags": tag_ids}
+    cat_id = cfg.get("category_id")
+    if cat_id:
+        payload["categories"] = [cat_id]
+    try:
+        pr = requests.post(f"{wp_url}/wp-json/wp/v2/posts", json=payload, auth=(user, app_pw), timeout=30)
+        if pr.ok:
+            pid = pr.json().get("id")
+            print("Đã tạo bản nháp ID:", pid)
+            return pid
+        else:
+            print("Lỗi tạo bài:", pr.status_code, pr.text[:300])
+    except Exception as e:
+        print("Lỗi kết nối WordPress:", e)
     return None
 
-def build_html(title, css, hero, mid):
-    bullets = [
-        "Khoảng <strong>80%</strong> người làm việc máy tính trên 4 giờ/ngày gặp triệu chứng khô hoặc mỏi mắt.",
-        "Không khí điều hòa làm giảm độ ẩm, dễ gây khô rát và kích ứng.",
-        "Tần suất chớp mắt giảm mạnh khi nhìn màn hình tập trung.",
-        "Nghỉ mắt 20–20–20, chớp mắt thường xuyên và vệ sinh bờ mi giúp mắt khỏe hơn."
-    ]
-    body = f"""
-<style>{css}</style>
-<article class="vy-article">
-  <div class="vy-meta"><span class="vy-badge">Bản nháp tự động</span>{datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}</div>
-  <h1>{title}</h1>
-  <figure class="vy-hero"><img src="{hero}" alt="Ảnh minh họa y tế"/></figure>
-
-  <div class="vy-note"><strong style="color:#004aad">🩺 Tóm tắt ngắn gọn:</strong> 
-  Làm việc trước màn hình lâu có thể khiến mắt khô, mỏi và mờ thoáng qua. Bài viết tóm lược nguyên nhân và cách chăm sóc an toàn mỗi ngày.</div>
-
-  <h2>💡 Điều bạn cần lưu ý</h2>
-  <ul style="list-style:none;padding-left:0;line-height:1.75;margin:10px 0 22px">
-    {''.join(f'<li>✅ {b}</li>' for b in bullets)}
-  </ul>
-
-  {f'<figure class="vy-hero"><img src="{mid}" alt="Ảnh minh họa y tế"/><figcaption style="text-align:center;color:#667;font-size:13px;margin-top:6px">Ảnh minh họa: Unsplash</figcaption></figure>' if mid else ''}
-
-  <h2>❓ Vì sao bạn dễ gặp tình trạng này?</h2>
-  <p>Thói quen nhìn màn hình liên tục khiến màng nước mắt bay hơi nhanh, làm khô giác mạc và tạo cảm giác rát hoặc nhức mỏi. 
-  Trong môi trường điều hòa, độ ẩm thường thấp, càng khiến mắt dễ kích ứng.</p>
-  <p>Hội chứng thị giác màn hình (Computer Vision Syndrome) bao gồm khô, mờ, đau đầu và nhạy sáng. 
-  Nếu kéo dài, mắt có thể viêm bờ mi hoặc rối loạn tiết dầu.</p>
-
-  <h2>🧭 Cách chăm sóc và phòng ngừa hiệu quả</h2>
-  <div class="vy-card">
-    <ol style="margin:0 0 0 18px;line-height:1.7">
-      <li><strong>Quy tắc 20–20–20:</strong> Sau mỗi 20 phút, nhìn xa 6m trong ít nhất 20 giây.</li>
-      <li><strong>Giữ độ ẩm phòng:</strong> 50–60%, tránh luồng gió thổi trực tiếp vào mắt.</li>
-      <li><strong>Vệ sinh bờ mi:</strong> Dùng gạc vệ sinh vô trùng, nhẹ dịu mỗi ngày.</li>
-      <li><strong>Ánh sáng hợp lý:</strong> Tránh màn hình quá chói hoặc phòng quá tối.</li>
-    </ol>
-    <p style="margin:10px 0 0;color:#556;font-size:14px">ℹ️ Nếu khô rát kéo dài &gt; 1 tuần, hãy đi khám nhãn khoa.</p>
-  </div>
-
-  <h2>👥 Ai nên áp dụng những hướng dẫn này</h2>
-  <ul style="list-style:disc;margin-left:22px;line-height:1.7">
-    <li>Nhân viên văn phòng, lập trình viên, học sinh – sinh viên.</li>
-    <li>Người làm việc trong phòng kín, môi trường điều hòa.</li>
-    <li>Người đeo kính áp tròng hoặc trang điểm mắt thường xuyên.</li>
-  </ul>
-
-  <h2>💬 Gợi ý từ chuyên gia</h2>
-  <div class="vy-cta">
-    <div style="font-size:18px;font-weight:700;margin-bottom:6px">Chăm sóc mắt khỏe mỗi ngày</div>
-    <div>🌐 Tham khảo: <a href="https://vietyenltd.com/san-pham/gac-ve-sinh-bo-mi-visionary/" target="_blank" rel="noopener">Gạc vệ sinh bờ mi Visionary</a></div>
-  </div>
-
-  <div class="vy-footer">
-    <div class="vy-src"><strong style="color:#004aad">🔗 Nguồn tham khảo:</strong><br>
-      <a href="https://suckhoedoisong.vn" target="_blank" rel="nofollow noopener">Sức Khỏe &amp; Đời Sống</a>
-    </div>
-    <div class="vy-src"><strong style="color:#004aad">⚠️ Miễn trừ trách nhiệm:</strong><br>
-      Nội dung chỉ nhằm mục đích tham khảo, không thay thế tư vấn, chẩn đoán hoặc điều trị y khoa.
-    </div>
-  </div>
-</article>
-"""
-    return body
+def fetch_rss_items(urls: List[str], limit_per_feed: int = 5) -> List[Dict[str, Any]]:
+    items = []
+    try:
+        import feedparser
+    except Exception:
+        print("feedparser chưa sẵn sàng. Cài đặt: pip install feedparser")
+        return items
+    for u in urls:
+        try:
+            d = feedparser.parse(u)
+            for e in d.entries[:limit_per_feed]:
+                title = e.get("title","").strip()
+                summary = e.get("summary","").strip()
+                link = e.get("link","").strip()
+                content = summary or title
+                items.append({"title": title, "content": content, "link": link})
+        except Exception as ex:
+            print("RSS lỗi:", u, ex)
+    return items
 
 def main():
-    with open("config.json","r",encoding="utf-8") as f:
-        cfg = json.load(f)
-    css = open("style-template.css","r",encoding="utf-8").read()
-
-    title = "Chăm sóc mắt và phòng ngừa khô mắt ở người dùng máy tính"
-    topic = detect_topic(title, cfg) or {}
-    fallbacks = topic.get("fallback_images", []) or [cfg.get("default_hero_url")]
-    hero = fallbacks[0]
-    mid = fallbacks[1] if len(fallbacks) > 1 else None
-
-    html = build_html(title, css, hero, mid)
-
-    wp = get_wp_from_env()
-    featured_id = wp.upload_media_from_url(hero, filename="hero.jpg")
-    tags = wp.create_or_get_tags(cfg.get("tags_by_name"))
-    res = wp.post_article(title, html, status=cfg.get("post_status","draft"),
-                          category_id=cfg.get("category_id"), tag_ids=tags, featured_media=featured_id)
-    print("Posted draft:", res.get("link","(no link)"))
+    cfg = load_config()
+    rss_items = fetch_rss_items(cfg.get("rss_sources", []), limit_per_feed=5)
+    if not rss_items:
+        rss_items = [{
+            "title": "Chăm sóc mắt khi dùng máy tính: giảm khô mỏi hiệu quả",
+            "content": "- Chớp mắt thường xuyên\n- Nghỉ 20-20-20\n- Giữ độ ẩm phòng\n- Vệ sinh bờ mi mỗi ngày\n\nNội dung mẫu.",
+            "link": "https://vietyenltd.com"
+        }]
+    for item in rss_items:
+        raw = f"{item['title']}\n\n{item['content']}"
+        if not keyword_gate(raw):
+            continue
+        if not ai_health_gate(raw, cfg):
+            continue
+        images = pick_images(cfg, raw)
+        html_doc = build_html(item["title"], item["content"], images, cfg)
+        html_doc = inject_internal_link(html_doc, cfg, raw)
+        wp_create_draft(item["title"], html_doc, cfg.get("tags_by_name", []), cfg)
 
 if __name__ == "__main__":
     main()
