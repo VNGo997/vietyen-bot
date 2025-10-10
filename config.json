@@ -1,16 +1,4 @@
 {
-  "demo_mode": true,
-  "post_status": "draft",
-  "category_id": null,
-  "tags_by_name": [
-    "sức khỏe",
-    "y tế",
-    "nhãn khoa"
-  ],
-  "image_policy": {
-    "min_images": 2,
-    "insert_position": "after_bullets"
-  },
   "topics": [
     {
       "name": "nhãn khoa",
@@ -19,25 +7,11 @@
         "bờ mi",
         "khô mắt",
         "viêm kết mạc",
-        "nhãn khoa",
-        "thị lực"
+        "nhãn khoa"
       ],
       "fallback_images": [
         "https://source.unsplash.com/1600x900/?eye,clinic",
         "https://source.unsplash.com/1200x800/?eyecare,health"
-      ]
-    },
-    {
-      "name": "tim mạch",
-      "match": [
-        "tim mạch",
-        "huyết áp",
-        "mạch vành",
-        "đột quỵ"
-      ],
-      "fallback_images": [
-        "https://source.unsplash.com/1600x900/?cardiology,medical",
-        "https://source.unsplash.com/1200x800/?heart,health"
       ]
     },
     {
@@ -52,7 +26,46 @@
         "https://source.unsplash.com/1600x900/?dermatology,clinic",
         "https://source.unsplash.com/1200x800/?skin,health"
       ]
+    },
+    {
+      "name": "tim mạch",
+      "match": [
+        "tim mạch",
+        "huyết áp",
+        "mạch vành",
+        "đột quỵ"
+      ],
+      "fallback_images": [
+        "https://source.unsplash.com/1600x900/?cardiology,medical",
+        "https://source.unsplash.com/1200x800/?heart,health"
+      ]
     }
   ],
-  "default_hero_url": "https://source.unsplash.com/1600x900/?medical,health"
+  "default_hero_url": "https://source.unsplash.com/1600x900/?medical,health",
+  "expert_advice": {
+    "default": {
+      "title": "💬 Gợi ý từ chuyên gia",
+      "lead": "Các bác sĩ khuyến nghị duy trì lối sống lành mạnh, nghỉ ngơi điều độ và vệ sinh đúng cách hằng ngày để giảm nguy cơ bệnh lý.",
+      "product_label": "Tìm hiểu thêm sản phẩm phù hợp",
+      "product_url": "https://vietyenltd.com/san-pham/"
+    },
+    "nhãn khoa": {
+      "title": "💬 Gợi ý từ chuyên gia",
+      "lead": "Giữ đôi mắt khỏe không chỉ là nghỉ ngơi hợp lý, mà còn cần làm sạch nhẹ nhàng vùng bờ mi mỗi ngày để giảm khô mắt và viêm bờ mi.",
+      "product_label": "Gạc vệ sinh bờ mi Visionary",
+      "product_url": "https://vietyenltd.com/san-pham/gac-ve-sinh-bo-mi-visionary/"
+    },
+    "da liễu": {
+      "title": "💬 Lưu ý chăm sóc da từ chuyên gia",
+      "lead": "Rửa tay đúng cách, làm sạch dịu nhẹ và duy trì hàng rào ẩm giúp hạn chế kích ứng, ngứa rát và bùng phát viêm da.",
+      "product_label": "Sản phẩm chăm sóc da dịu nhẹ",
+      "product_url": "https://vietyenltd.com/san-pham/"
+    },
+    "tim mạch": {
+      "title": "💬 Khuyến nghị từ chuyên gia tim mạch",
+      "lead": "Kiểm soát huyết áp, vận động đều đặn và theo dõi chế độ ăn ít muối là nền tảng bảo vệ sức khỏe tim mạch.",
+      "product_label": "Thiết bị hỗ trợ theo dõi sức khỏe",
+      "product_url": "https://vietyenltd.com/san-pham/"
+    }
+  }
 }

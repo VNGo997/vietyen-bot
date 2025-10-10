@@ -1,15 +1,2 @@
-/* v4.2b Visionary style */
-.vy-article{max-width:900px;margin:0 auto;padding:24px;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.75;color:#0f172a}
-.vy-article h1{font-size:2.1rem;color:#004aad;line-height:1.2;margin:.2em 0 .6em}
-.vy-article h2{font-size:1.2rem;color:#0b3f91;border-bottom:2px solid #e1edff;padding-bottom:6px;margin-top:1.4em}
-.vy-hero{margin:10px 0 18px;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0}
-.vy-hero img{width:100%;height:auto;display:block}
-.vy-note{background:linear-gradient(90deg,#eaf2ff,#f7fbff);border:1px solid #d9e7ff;border-radius:12px;padding:14px 16px;margin:16px 0}
-.vy-card{background:#f7fbff;border:1px dashed #b9d6ff;border-radius:10px;padding:14px 16px;margin-bottom:20px}
-.vy-footer{display:grid;grid-template-columns:1fr;gap:12px}
-@media(min-width:720px){.vy-footer{grid-template-columns:1fr 1fr}}
-.vy-src{background:#fbfdff;border:1px solid #e8eefc;border-radius:12px;padding:14px 16px}
-.vy-cta{margin:26px 0;background:linear-gradient(135deg,#004aad,#0b73d5);color:#fff;border-radius:12px;padding:18px;text-align:center}
-.vy-cta a{color:#ffe07a;text-decoration:underline}
-.vy-meta{font-size:.9rem;color:#64748b}
-.vy-badge{display:inline-block;background:#e0f2fe;border:1px solid #bae6fd;color:#0369a1;border-radius:999px;padding:3px 10px;margin-right:8px}
+/* Visionary style */
+.vy-cta {background:linear-gradient(135deg,#004aad,#0b73d5);color:#fff;border-radius:12px;text-align:center;line-height:1.7;padding:24px 20px}
