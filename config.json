@@ -24,11 +24,53 @@
     }
   ],
   "category_id": null,
-  "tags": [
+  "tags_by_name": [
     "sức khỏe",
     "y tế",
-    "VietYenLTD"
+    "thông tin"
   ],
   "post_status": "draft",
-  "post_time_hour_vn": 8
+  "post_time_hour_vn": 8,
+  "include_keywords": [
+    "sức khỏe",
+    "y tế",
+    "bệnh",
+    "triệu chứng",
+    "điều trị",
+    "phòng ngừa",
+    "dự phòng",
+    "dinh dưỡng",
+    "tiêm chủng",
+    "vaccine",
+    "tiểu đường",
+    "huyết áp",
+    "tim mạch",
+    "ung thư",
+    "viêm xoang",
+    "cúm",
+    "cảm",
+    "dạ dày",
+    "gan",
+    "thận",
+    "da liễu",
+    "mắt",
+    "bờ mi",
+    "khô mắt",
+    "nhi khoa",
+    "sản khoa",
+    "phụ nữ",
+    "tiền mãn kinh"
+  ],
+  "exclude_keywords": [
+    "cháy",
+    "hỏa hoạn",
+    "cứu hỏa",
+    "tai nạn",
+    "đám cháy",
+    "pháp luật",
+    "bạo lực",
+    "tai nạn giao thông"
+  ],
+  "default_hero_url": "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?q=80&w=1600&auto=format&fit=crop",
+  "cta_html": "<strong>Gợi ý nhẹ:</strong> Quan tâm chăm sóc mắt hàng ngày? Tham khảo sản phẩm tại <a href='https://vietyenltd.com/san-pham/' target='_blank' rel='noopener'>VietYenLTD</a>."
 }
