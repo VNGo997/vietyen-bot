@@ -1,72 +1,31 @@
 {
-  "version": "4.3.4",
-  "post_status": "draft",
-  "category_id": null,
-  "tags_by_name": [
-    "sức khỏe",
-    "y tế"
+  "rss_sources": [
+    "https://example-health.vn/rss.xml",
+    "https://example2.vn/suc-khoe.rss"
   ],
-  "image_policy": {
-    "min_images": 1
-  },
   "ai_check": {
     "enabled": true,
     "model": "gpt-4o-mini",
-    "prompt": "Bạn là biên tập viên y tế. Trả lời 'Y' nếu nội dung thuộc chủ đề sức khỏe/y tế (bệnh, triệu chứng, điều trị, dự phòng, dinh dưỡng, y tế công cộng, nhãn khoa…). Trả lời 'N' nếu không. Chỉ trả về Y hoặc N."
+    "threshold": 0.6
   },
-  "rss_sources": [
-    "https://suckhoedoisong.vn/rss.htm",
-    "https://vnexpress.net/rss/suc-khoe.rss",
-    "https://tuoitre.vn/rss/suc-khoe.rss",
-    "https://dantri.com.vn/rss/suc-khoe.rss",
-    "https://vtv.vn/suc-khoe.rss",
-    "https://benhvienmat.vn/rss"
-  ],
   "internal_links": [
-    {
-      "keywords": [
-        "bờ mi",
-        "viêm bờ mi",
-        "khô mắt",
-        "vệ sinh bờ mi",
-        "mí mắt"
-      ],
-      "title": "Gạc vệ sinh bờ mi Visionary",
-      "url": "https://vietyenltd.com/san-pham/gac-ve-sinh-bo-mi-visionary/"
-    }
+    {"keyword": "vệ sinh mắt", "url": "https://vietyenltd.com/san-pham/khan-lau-mi-mat-visionary-baby/", "max_per_post": 1},
+    {"keyword": "bờ mi", "url": "https://vietyenltd.com/san-pham/visionary-khan-lau-ve-sinh-mi-mat/", "max_per_post": 1}
   ],
-  "topics": [
-    {
-      "name": "y_te_chung",
-      "match": [
-        "sức khỏe",
-        "y tế",
-        "bệnh",
-        "điều trị",
-        "dự phòng"
-      ],
-      "fallback_images": [
-        "https://source.unsplash.com/1600x900/?medical,health"
-      ]
-    },
-    {
-      "name": "nhan_khoa",
-      "match": [
-        "mắt",
-        "bờ mi",
-        "khô mắt",
-        "viêm kết mạc",
-        "nhãn khoa",
-        "thị lực"
-      ],
-      "fallback_images": [
-        "https://source.unsplash.com/1600x900/?eye,clinic"
-      ]
-    }
+  "categories": [
+    {"name": "Nhãn khoa", "keywords": ["mắt", "viêm kết mạc", "khô mắt"], "id": 18},
+    {"name": "Dinh dưỡng", "keywords": ["vitamin", "béo phì", "ăn kiêng"], "id": 12},
+    {"name": "Chăm sóc", "keywords": ["chăm sóc da", "vệ sinh"], "id": 9}
   ],
-  "default_hero_url": "https://source.unsplash.com/1600x900/?medical,health",
+  "default_hero_url": "https://vietyenltd.com/wp-content/uploads/2025/10/hero-health.jpg",
   "brand": {
-    "site_name": "VietYenLTD Health Desk",
-    "publisher_logo": "https://vietyenltd.com/wp-content/uploads/logo.png"
+    "author": "Vietyen Health Desk",
+    "publisher": "Công ty TNHH Thương Mại Việt Yến",
+    "logo_url": "https://vietyenltd.com/wp-content/uploads/2025/10/logo-512.png"
+  },
+  "post": {
+    "status": "draft",
+    "min_paragraphs": 4,
+    "max_internal_links": 3
   }
 }
