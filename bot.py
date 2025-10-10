@@ -2,11 +2,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-vietyen-bot v4.3.4
-- Thêm SEO: title rút gọn, meta description, keywords, slug, JSON-LD (Article)
-- Giữ: AI check, Expert Tip AI, 1 bài/ngày, UI Visionary, draft mode
+vietyen-bot v4.3.5
+- AI viết lại bài đầy đủ (tiếng Việt tự nhiên) từ RSS/summarized source (không trùng lặp, không bịa)
+- Bảo toàn nguồn: chèn link bài gốc + chỉ tường thuật nội dung có trong nguồn
+- Giữ: AI check, Expert Tip, 1 bài/ngày, SEO + JSON-LD, UI Visionary, draft mode
 """
-import os, re, json, html, random, requests, datetime, unicodedata
+import os, re, json, html, random, requests, unicodedata, datetime
 from typing import List, Dict, Any, Optional
 
 try:
@@ -40,7 +41,7 @@ def keyword_gate(text):
     t = text.lower()
     keys = ["sức khỏe","y tế","bệnh","điều trị","dự phòng","triệu chứng","chẩn đoán",
             "nhãn khoa","bờ mi","khô mắt","viêm","thuốc","bác sĩ","bệnh viện",
-            "phòng bệnh","vaccine","dinh dưỡng","tim mạch","da liễu","nhi khoa"]
+            "phòng bệnh","vaccine","dinh dưỡng","tim mạch","da liễu","nhi khoa","cấp cứu","đa chấn thương"]
     return any(k in t for k in keys)
 
 def ai_health_gate(text, cfg):
@@ -69,7 +70,7 @@ def ai_expert_tip(title, text, cfg, link_rule):
     if not api_key: return fallback_tip(link_rule)
     try:
         cta = "Sản phẩm gợi ý: {}".format(link_rule.get('title')) if link_rule else ""
-        prompt = "Bạn là chuyên gia y tế, viết 3–5 câu khuyên ngắn thực tế, tiếng Việt, dễ hiểu. {}\\n\\nTiêu đề: {}\\n\\nNội dung: {}".format(cta, title, text[:1200])
+        prompt = "Bạn là chuyên gia y tế, viết 3–5 câu khuyên ngắn thực tế, tiếng Việt, dễ hiểu. {}\\n\\nTiêu đề: {}\\n\\nTóm tắt nội dung (nguồn): {}".format(cta, title, text[:1200])
         r = requests.post("https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
@@ -86,12 +87,8 @@ def fallback_tip(rule):
     if rule: t += " Sản phẩm hỗ trợ như {} có thể giúp cải thiện hiệu quả.".format(html.escape(rule.get('title')))
     return t
 
-def pick_images(cfg, text, rss_img=None):
-    if rss_img: return [rss_img]
-    t = text.lower()
-    for tp in cfg.get("topics", []):
-        if any(k in t for k in tp.get("match", [])): return tp.get("fallback_images", [])
-    return [cfg.get("default_hero_url")]
+def pick_images(default_hero, text, rss_img=None):
+    return [rss_img] if rss_img else [default_hero]
 
 def find_link_rule(cfg, text):
     t = text.lower()
@@ -107,17 +104,12 @@ def slugify(value: str) -> str:
     return value[:80].strip('-') or 'bai-viet-suc-khoe'
 
 def gen_seo(title: str, body: str) -> Dict[str, str]:
-    # title <= 60 chars, desc <= 160
     base_title = title.strip()
-    if len(base_title) > 60:
-        base_title = base_title[:57].rstrip() + "..."
-    # simple description from first sentence
+    if len(base_title) > 60: base_title = base_title[:57].rstrip() + "..."
     sentences = re.split(r'[\\.!?]\\s', body)
     first = (sentences[0] or "").strip()
-    if len(first) < 50 and len(sentences) > 1:
-        first += ". " + sentences[1].strip()
+    if len(first) < 50 and len(sentences) > 1: first += ". " + sentences[1].strip()
     desc = first[:157].rstrip() + "..." if len(first) > 160 else first
-    # keywords: pick top nouns-ish by simple heuristics
     words = re.findall(r"[a-zA-ZÀ-ỹ0-9]{4,}", (title + " " + body).lower())
     common = {"và","cho","của","khi","bị","về","trong","được","bệnh","sức","khỏe","người","bài","viết","này","các","một"}
     uniq = []
@@ -144,29 +136,63 @@ def jsonld_article(cfg, title, desc, url, img):
     import json as _json
     return '<script type="application/ld+json">{}</script>'.format(_json.dumps(data, ensure_ascii=False))
 
+# -------- AI composer --------
+def ai_compose_full_article(title: str, source_text: str, source_url: str, cfg: Dict[str,Any]) -> str:
+    """
+    Viết lại toàn bộ bài theo phong cách Visionary: mở bài -> bối cảnh -> chuyên môn -> khuyến cáo -> kết.
+    Ràng buộc: Chỉ dùng thông tin có trong source_text/title; KHÔNG bịa, KHÔNG giả mạo trích dẫn.
+    Nếu dữ liệu thiếu, diễn giải ở mức tổng quát (không suy diễn con số/địa danh).
+    """
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        # Fallback: mở rộng tóm tắt an toàn
+        intro = "Bài viết tóm lược theo nguồn chính thống, trình bày ngắn gọn và dễ hiểu."
+        body = "{}".format(source_text)
+        return intro + "\\n\\n" + body
+    sys = "Bạn là biên tập viên y tế viết tiếng Việt tự nhiên, giọng chuyên môn thân thiện."
+    user = (
+        "Viết lại **toàn bộ bài** theo phong cách Visionary (y tế):\\n"
+        "- Không trùng lặp nguyên văn; không bịa chi tiết.\\n"
+        "- Chỉ dùng thông tin có trong tiêu đề và phần tóm tắt/đoạn trích sau đây.\\n"
+        "- Bố cục: Mở bài (1 đoạn) → Bối cảnh/Tình huống (1-2 đoạn) → Thông tin y khoa/cách xử trí (1-2 đoạn) → Lời khuyên thực tế (1 đoạn).\\n"
+        "- Không dùng bullet nếu không cần thiết; ưu tiên đoạn văn ngắn dễ đọc.\\n"
+        "- Giữ thái độ trung lập, tôn trọng người bệnh và cơ sở y tế.\\n"
+        "- Kết bài nêu ý nghĩa/người đọc nên rút kinh nghiệm gì.\\n"
+        "Tiêu đề nguồn: {title}\\n\\nTóm tắt/nguyên văn nguồn:\\n{src}\\n\\n"
+        "Nhắc nhẹ nguồn ở cuối (dạng: Theo nguồn). Không thêm số liệu hoặc phát biểu không có trong nguồn."
+    ).format(title=title, src=source_text[:2000])
+    try:
+        r = requests.post("https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type":"application/json"},
+            json={
+                "model": cfg.get("ai_check",{}).get("model","gpt-4o-mini"),
+                "messages":[{"role":"system","content":sys},{"role":"user","content":user}],
+                "temperature":0.4
+            },timeout=45)
+        text = r.json()["choices"][0]["message"]["content"].strip()
+        return text
+    except Exception:
+        return source_text
+
 # -------- UI --------
-def build_html(title, body_text, imgs, cfg, tip_html, rule, source_url=None, seo=None):
-    hero = imgs[0] if imgs else cfg.get("default_hero_url")
+def build_html(title, body_text, hero_img, cfg, expert_tip_html, rule, source_url=None, seo=None):
     cap = "Ảnh minh hoạ: Unsplash"
-    bullets = re.findall(r"^[\\-\\–•]\\s*(.+)$", body_text, flags=re.M)
-    li = ''.join(["<li>✅ {}</li>".format(html.escape(b)) for b in bullets[:6]]) if bullets else ""
-    expert = '<div style="margin:26px 0;background:linear-gradient(135deg,#004aad,#0b73d5);color:#fff;border-radius:12px;padding:18px;"><div style="font-size:18px;font-weight:700;margin-bottom:6px">💬 Gợi ý từ chuyên gia</div><div style="line-height:1.7">{}</div>'.format(tip_html)
+    expert = '<div style="margin:26px 0;background:linear-gradient(135deg,#004aad,#0b73d5);color:#fff;border-radius:12px;padding:18px;"><div style="font-size:18px;font-weight:700;margin-bottom:6px">💬 Gợi ý từ chuyên gia</div><div style="line-height:1.7">{}</div>'.format(expert_tip_html)
     if rule:
         expert += '<div style="margin-top:10px">🌐 Tham khảo: <a href="{}" style="color:#ffe07a;text-decoration:underline">{}</a></div>'.format(html.escape(rule["url"]), html.escape(rule["title"]))
     expert += '</div>'
     footer = '<div style="border:1px solid #e8eefc;border-radius:12px;padding:14px 16px;background:#fbfdff;margin-top:24px"><p><span style="color:#004aad">🔗 Nguồn tham khảo:</span> Tổng hợp từ các nguồn chính thống về sức khỏe.</p><p style="color:#667;font-size:14px">⚠️ <strong>Miễn trừ trách nhiệm:</strong> Nội dung chỉ tham khảo, không thay thế tư vấn y khoa.</p></div>'
     if source_url:
-        footer = '<p style="margin-top:14px">📎 Nguồn bài gốc: <a href="{}" target="_blank" rel="noopener">Xem tại đây</a></p>'.format(html.escape(source_url)) + footer
+        footer = '<p style="margin-top:14px">📎 Theo nguồn: <a href="{}" target="_blank" rel="noopener">Xem bài gốc</a></p>'.format(html.escape(source_url)) + footer
 
+    # Convert paragraphs
     body_html = "<p>{}</p>".format(html.escape(body_text).replace("\\n\\n","</p><p>").replace("\\n","<br>"))
-    html_doc = "<figure><img src='{}' style='width:100%;border-radius:14px;'><figcaption>{}</figcaption></figure>".format(hero, cap)
-    html_doc += "<div style='background:linear-gradient(90deg,#eaf2ff,#f7fbff);border:1px solid #d9e7ff;border-radius:12px;padding:14px 16px;margin:16px 0'><strong style='color:#004aad'>🩺 Tóm tắt ngắn gọn:</strong> Bài viết sức khỏe biên tập theo chuẩn Visionary.</div>"
-    if li:
-        html_doc += "<h2>💡 Điều bạn cần lưu ý</h2><ul style='list-style:none;padding-left:0'>{}</ul>".format(li)
+
+    html_doc = "<figure><img src='{}' style='width:100%;border-radius:14px;'><figcaption>{}</figcaption></figure>".format(hero_img, cap)
+    html_doc += "<div style='background:linear-gradient(90deg,#eaf2ff,#f7fbff);border:1px solid #d9e7ff;border-radius:12px;padding:14px 16px;margin:16px 0'><strong style='color:#004aad'>🩺 Tóm tắt ngắn gọn:</strong> Bài viết được biên tập lại thân thiện, dựa trên nguồn chính thống.</div>"
     html_doc += body_html + expert + footer
-    # Append JSON-LD
     if seo:
-        html_doc += jsonld_article(cfg, seo.get("seo_title",title), seo.get("seo_desc",""), "", hero)
+        html_doc += jsonld_article(cfg, seo.get("seo_title",title), seo.get("seo_desc",""), "", hero_img)
     return html_doc
 
 # -------- WP --------
@@ -179,21 +205,19 @@ def wp_create_draft(title, content, tags, cfg, seo=None):
     try:
         ids = []
         for t in tags:
-            r=requests.get("{}/wp-json/wp/v2/tags".format(wp),params={"search":t,"per_page":1},auth=(u,pw),timeout=20)
+            r=requests.get(f"{wp}/wp-json/wp/v2/tags",params={"search":t,"per_page":1},auth=(u,pw),timeout=20)
             if r.ok and r.json(): ids.append(r.json()[0]["id"])
             else:
-                cr=requests.post("{}/wp-json/wp/v2/tags".format(wp),json={"name":t},auth=(u,pw),timeout=20)
+                cr=requests.post(f"{wp}/wp-json/wp/v2/tags",json={"name":t},auth=(u,pw),timeout=20)
                 if cr.ok: ids.append(cr.json()["id"])
-        payload={"title": seo.get("seo_title",title) if seo else title,
-                 "content": content,
-                 "status": "draft",
-                 "tags": ids}
+        p={"title": seo.get("seo_title",title) if seo else title,
+           "content": content,
+           "status": "draft",
+           "tags": ids}
         if seo:
-            payload["excerpt"] = seo.get("seo_desc","")
-            payload["slug"] = seo.get("seo_slug","")
-        cat_id = cfg.get("category_id")
-        if cat_id: payload["categories"] = [cat_id]
-        c=requests.post("{}/wp-json/wp/v2/posts".format(wp),json=payload,auth=(u,pw),timeout=30)
+            p["excerpt"]=seo.get("seo_desc","")
+            p["slug"]=seo.get("seo_slug","")
+        c=requests.post(f"{wp}/wp-json/wp/v2/posts",json=p,auth=(u,pw),timeout=30)
         if c.ok: print("Đã tạo bản nháp ID:",c.json().get("id"))
         else: print("Lỗi tạo bài:",c.status_code,c.text[:300])
     except Exception as e: print("Lỗi WP:",e)
@@ -217,17 +241,34 @@ def fetch_rss(urls):
     return out
 
 # -------- Main --------
+def gen_seo(title: str, body: str) -> Dict[str, str]:
+    base_title = title.strip()
+    if len(base_title) > 60: base_title = base_title[:57].rstrip() + "..."
+    sentences = re.split(r'[\\.!?]\\s', body)
+    first = (sentences[0] or "").strip()
+    if len(first) < 50 and len(sentences) > 1: first += ". " + sentences[1].strip()
+    desc = first[:157].rstrip() + "..." if len(first) > 160 else first
+    words = re.findall(r"[a-zA-ZÀ-ỹ0-9]{4,}", (title + " " + body).lower())
+    common = {"và","cho","của","khi","bị","về","trong","được","bệnh","sức","khỏe","người","bài","viết","này","các","một"}
+    uniq = []
+    for w in words:
+        if w in common: continue
+        if w not in uniq: uniq.append(w)
+    keywords = ", ".join(uniq[:8])
+    return {"seo_title": base_title, "seo_desc": desc, "seo_keywords": keywords, "seo_slug": slugify(title)}
+
 def main():
     cfg=load_config()
     items=fetch_rss(cfg.get("rss_sources",[]))
     ok=[i for i in items if keyword_gate(i["title"]+" "+i["content_text"]) and ai_health_gate(i["title"]+" "+i["content_text"],cfg)]
     if not ok: print("Không có bài hợp lệ."); return
     c=random.choice(ok)
-    imgs=pick_images(cfg,c["content_text"],rss_img=c.get("rss_img"))
+    hero_img=(c.get("rss_img") or cfg.get("default_hero_url"))
     rule=find_link_rule(cfg,c["content_text"])
-    tip=ai_expert_tip(c["title"],c["content_text"],cfg,rule)
-    seo=gen_seo(c["title"], c["content_text"])
-    html_doc=build_html(c["title"],c["content_text"],imgs,cfg,tip,rule,source_url=c.get("link"),seo=seo)
-    wp_create_draft(c["title"],html_doc,cfg.get("tags_by_name",[]),cfg,seo=seo)
+    expert_tip=ai_expert_tip(c["title"],c["content_text"],cfg,rule)
+    full_text=ai_compose_full_article(c["title"], c["content_text"], c.get("link"), cfg)
+    seo=gen_seo(c["title"], full_text)
+    html_doc=build_html(c["title"], full_text, hero_img, cfg, expert_tip, rule, source_url=c.get("link"), seo=seo)
+    wp_create_draft(c["title"], html_doc, cfg.get("tags_by_name", []), cfg, seo=seo)
 
 if __name__=="__main__": main()
