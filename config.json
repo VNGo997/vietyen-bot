@@ -1,0 +1,34 @@
+{
+  "bot_status": "ON",
+  "post_cycle": [
+    "news",
+    "news",
+    "share"
+  ],
+  "sources": [
+    {
+      "name": "Sức Khỏe & Đời Sống",
+      "rss": "https://suckhoedoisong.vn/rss/home.rss"
+    },
+    {
+      "name": "VnExpress Sức khỏe",
+      "rss": "https://vnexpress.net/rss/suc-khoe.rss"
+    },
+    {
+      "name": "Tuổi Trẻ Sức Khỏe",
+      "rss": "https://tuoitre.vn/rss/suc-khoe.rss"
+    },
+    {
+      "name": "Thanh Niên Sức Khỏe",
+      "rss": "https://thanhnien.vn/rss/suc-khoe.rss"
+    }
+  ],
+  "category_id": null,
+  "tags": [
+    "sức khỏe",
+    "y tế",
+    "VietYenLTD"
+  ],
+  "post_status": "draft",
+  "post_time_hour_vn": 8
+}
