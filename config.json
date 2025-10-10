@@ -1,80 +1,49 @@
 {
-  "bot_status": "ON",
-  "post_cycle": [
-    "news",
-    "share",
-    "news"
-  ],
-  "sources": [
+  "image_policy": {
+    "min_images": 2,
+    "insert_position": "after_paragraph_2"
+  },
+  "topics": [
     {
-      "name": "Sức Khỏe & Đời Sống",
-      "rss": "https://suckhoedoisong.vn/rss/home.rss"
+      "name": "nhãn khoa",
+      "match": [
+        "mắt",
+        "bờ mi",
+        "khô mắt",
+        "viêm kết mạc",
+        "nhãn khoa"
+      ],
+      "fallback_images": [
+        "https://source.unsplash.com/1600x900/?eye,clinic",
+        "https://source.unsplash.com/1200x800/?eyecare,health"
+      ]
     },
     {
-      "name": "VnExpress Sức khỏe",
-      "rss": "https://vnexpress.net/rss/suc-khoe.rss"
+      "name": "tim mạch",
+      "match": [
+        "tim mạch",
+        "huyết áp",
+        "mạch vành",
+        "đột quỵ"
+      ],
+      "fallback_images": [
+        "https://source.unsplash.com/1600x900/?cardiology,medical",
+        "https://source.unsplash.com/1200x800/?heart,health"
+      ]
     },
     {
-      "name": "Tuổi Trẻ Sức Khỏe",
-      "rss": "https://tuoitre.vn/rss/suc-khoe.rss"
-    },
-    {
-      "name": "Thanh Niên Sức Khỏe",
-      "rss": "https://thanhnien.vn/rss/suc-khoe.rss"
+      "name": "da liễu",
+      "match": [
+        "da liễu",
+        "viêm da",
+        "mụn",
+        "dị ứng da"
+      ],
+      "fallback_images": [
+        "https://source.unsplash.com/1600x900/?dermatology,clinic",
+        "https://source.unsplash.com/1200x800/?skin,health"
+      ]
     }
   ],
-  "category_id": null,
-  "tags_by_name": [
-    "sức khỏe",
-    "y tế",
-    "thông tin"
-  ],
-  "post_status": "draft",
-  "post_time_hour_vn": 8,
-  "include_keywords": [
-    "sức khỏe",
-    "y tế",
-    "bệnh",
-    "triệu chứng",
-    "điều trị",
-    "phòng ngừa",
-    "dự phòng",
-    "dinh dưỡng",
-    "tiêm chủng",
-    "vaccine",
-    "tiểu đường",
-    "huyết áp",
-    "tim mạch",
-    "ung thư",
-    "viêm xoang",
-    "cúm",
-    "cảm",
-    "dạ dày",
-    "gan",
-    "thận",
-    "da liễu",
-    "mắt",
-    "bờ mi",
-    "khô mắt",
-    "nhi khoa",
-    "sản khoa",
-    "phụ nữ",
-    "tiền mãn kinh"
-  ],
-  "exclude_keywords": [
-    "cháy",
-    "hỏa hoạn",
-    "cứu hỏa",
-    "tai nạn",
-    "đám cháy",
-    "pháp luật",
-    "bạo lực",
-    "tai nạn giao thông"
-  ],
-  "default_hero_url": "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?q=80&w=1600&auto=format&fit=crop",
-  "cta_html": "<strong>Gợi ý:</strong> Quan tâm chăm sóc mắt mỗi ngày? Tham khảo sản phẩm tại <a href='https://vietyenltd.com/san-pham/' target='_blank' rel='noopener'>VietYenLTD</a>.",
-  "max_paragraphs": 8,
-  "max_chars": 3500,
-  "keypoints_n": 5,
-  "enable_toc": true
+  "default_hero_url": "https://source.unsplash.com/1600x900/?medical,health"
 }
